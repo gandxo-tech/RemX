@@ -1,0 +1,6 @@
+{
+  "name": "RemX",
+  "description": "App to retrieve saved Instagram reels using AI and Firebase.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
