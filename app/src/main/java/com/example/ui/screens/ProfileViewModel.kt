@@ -18,6 +18,8 @@ import java.io.OutputStream
 
 class ProfileViewModel(application: Application) : AndroidViewModel(application) {
     private val repository: ReelRepository
+    private val userDao = AppDatabase.getDatabase(application).userDao()
+    val user = userDao.getUser()
     private val moshi: Moshi
     private val listAdapter: JsonAdapter<List<Reel>>
 

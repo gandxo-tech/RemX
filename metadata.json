@@ -1,6 +1,6 @@
 {
   "name": "RemX",
-  "description": "App to retrieve saved Instagram reels using AI and Firebase.",
+  "description": "RemX - Second Cerveau Visuel & Assistant d'analyse d'Instagram Reels propulsé par l'IA Google Gemini, conçu par GBAGUIDI Exaucé alias Gandxo.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

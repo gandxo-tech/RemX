@@ -10,6 +10,8 @@ import com.example.data.Reel
 import com.example.data.ReelRepository
 import kotlinx.coroutines.launch
 
+import com.example.api.ReelAnalyzer
+
 class ShareActivity : ComponentActivity() {
     private lateinit var repository: ReelRepository
 
@@ -57,7 +59,9 @@ class ShareActivity : ComponentActivity() {
         lifecycleScope.launch {
             try {
                 repository.insert(newReel)
-                Toast.makeText(this@ShareActivity, "Reel enregistré ✓", Toast.LENGTH_SHORT).show()
+                val database = AppDatabase.getDatabase(this@ShareActivity)
+                ReelAnalyzer.analyzeReel(newReel, database.reelDao())
+                Toast.makeText(this@ShareActivity, "Reel enregistré et en cours d'analyse ✓", Toast.LENGTH_SHORT).show()
             } catch (e: Exception) {
                 Toast.makeText(this@ShareActivity, "Erreur lors de l'enregistrement", Toast.LENGTH_SHORT).show()
             } finally {

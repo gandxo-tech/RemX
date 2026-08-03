@@ -13,11 +13,14 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.HourglassEmpty
 import androidx.compose.material.icons.filled.OpenInBrowser
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -25,6 +28,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
+import com.example.ui.components.GradientButton
+import com.example.ui.components.RemXHeaderDivider
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -43,19 +48,32 @@ fun DetailScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("Détail") },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Retour")
+            Column {
+                TopAppBar(
+                    title = {
+                        Text(
+                            text = "Fiche Souvenir",
+                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.titleLarge
+                        )
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = onNavigateBack) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Retour")
+                        }
+                    },
+                    actions = {
+                        IconButton(onClick = { showDeleteConfirm = true }) {
+                            Icon(
+                                Icons.Filled.Delete,
+                                contentDescription = "Oublier ce souvenir",
+                                tint = MaterialTheme.colorScheme.error
+                            )
+                        }
                     }
-                },
-                actions = {
-                    IconButton(onClick = { showDeleteConfirm = true }) {
-                        Icon(Icons.Filled.Delete, contentDescription = "Supprimer", tint = MaterialTheme.colorScheme.error)
-                    }
-                }
-            )
+                )
+                RemXHeaderDivider()
+            }
         }
     ) { innerPadding ->
         Box(
@@ -65,7 +83,10 @@ fun DetailScreen(
         ) {
             when (val currentState = state) {
                 is DetailState.Loading -> {
-                    CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+                    CircularProgressIndicator(
+                        modifier = Modifier.align(Alignment.Center),
+                        color = MaterialTheme.colorScheme.primary
+                    )
                 }
                 is DetailState.Error -> {
                     Text(
@@ -83,119 +104,173 @@ fun DetailScreen(
                             .padding(16.dp),
                         verticalArrangement = Arrangement.spacedBy(24.dp)
                     ) {
-                        // Thumbnail
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .aspectRatio(9f / 16f)
-                                .clip(RoundedCornerShape(16.dp))
-                                .background(MaterialTheme.colorScheme.surfaceVariant),
-                            contentAlignment = Alignment.Center
+                        // Miniature video 9:16 avec coins arrondis 16dp et ombre
+                        Card(
+                            shape = RoundedCornerShape(16.dp),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
+                            modifier = Modifier.fillMaxWidth()
                         ) {
-                            if (reel.thumbnailUrl.isNotEmpty()) {
-                                AsyncImage(
-                                    model = reel.thumbnailUrl,
-                                    contentDescription = "Thumbnail",
-                                    contentScale = ContentScale.Crop,
-                                    modifier = Modifier.fillMaxSize()
-                                )
-                            } else {
-                                Icon(
-                                    imageVector = if (reel.status == "error") Icons.Filled.Error else Icons.Filled.HourglassEmpty,
-                                    contentDescription = "Placeholder",
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.size(64.dp)
-                                )
-                            }
-                        }
-
-                        // Info Section
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            if (reel.author.isNotEmpty()) {
-                                Text(
-                                    text = "@${reel.author}",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    color = MaterialTheme.colorScheme.primary,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
-                            
-                            if (reel.caption.isNotEmpty()) {
-                                Text(
-                                    text = reel.caption,
-                                    style = MaterialTheme.typography.bodyLarge
-                                )
-                            }
-
-                            Button(
-                                onClick = {
-                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(reel.url))
-                                    context.startActivity(intent)
-                                },
-                                modifier = Modifier.padding(top = 8.dp)
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .aspectRatio(9f / 16f)
+                                    .clip(RoundedCornerShape(16.dp))
+                                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                                contentAlignment = Alignment.Center
                             ) {
-                                Icon(Icons.Filled.OpenInBrowser, contentDescription = null)
-                                Spacer(Modifier.width(8.dp))
-                                Text("Voir sur Instagram")
+                                if (reel.thumbnailUrl.isNotEmpty()) {
+                                    AsyncImage(
+                                        model = reel.thumbnailUrl,
+                                        contentDescription = "Miniature vidéo",
+                                        contentScale = ContentScale.Crop,
+                                        modifier = Modifier.fillMaxSize()
+                                    )
+                                } else {
+                                    Icon(
+                                        imageVector = if (reel.status == "error") Icons.Filled.Error else Icons.Filled.HourglassEmpty,
+                                        contentDescription = "Chargement",
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(64.dp)
+                                    )
+                                }
                             }
                         }
-                        
-                        Divider()
 
-                        // Analysis Section
-                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                            Text(
-                                text = "Analyse IA",
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                            
-                            if (reel.status == "pending") {
-                                Surface(
-                                    color = MaterialTheme.colorScheme.secondaryContainer,
-                                    shape = RoundedCornerShape(12.dp),
-                                    modifier = Modifier.fillMaxWidth()
+                        // Informations & Actions
+                        Card(
+                            shape = RoundedCornerShape(16.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(16.dp),
+                                verticalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                if (reel.author.isNotEmpty()) {
+                                    Text(
+                                        text = "@${reel.author}",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                                
+                                if (reel.caption.isNotEmpty()) {
+                                    Text(
+                                        text = reel.caption,
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
+
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(top = 8.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
                                 ) {
-                                    Row(
-                                        modifier = Modifier.padding(16.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                                    GradientButton(
+                                        onClick = {
+                                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(reel.url))
+                                            context.startActivity(intent)
+                                        },
+                                        modifier = Modifier.weight(1f),
+                                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 12.dp)
                                     ) {
-                                        CircularProgressIndicator(modifier = Modifier.size(24.dp))
-                                        Text(
-                                            text = "Ce reel est en cours d'analyse, reviens dans quelques minutes.",
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            color = MaterialTheme.colorScheme.onSecondaryContainer
-                                        )
+                                        Icon(Icons.Filled.OpenInBrowser, contentDescription = null, tint = Color.White)
+                                        Spacer(Modifier.width(6.dp))
+                                        Text("Voir sur Instagram", color = Color.White, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelMedium)
+                                    }
+
+                                    OutlinedButton(
+                                        onClick = {
+                                            val sendIntent: Intent = Intent().apply {
+                                                action = Intent.ACTION_SEND
+                                                putExtra(Intent.EXTRA_TEXT, reel.url)
+                                                type = "text/plain"
+                                            }
+                                            val shareIntent = Intent.createChooser(sendIntent, null)
+                                            context.startActivity(shareIntent)
+                                        },
+                                        shape = RoundedCornerShape(16.dp),
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        Icon(Icons.Filled.Share, contentDescription = null)
+                                        Spacer(Modifier.width(6.dp))
+                                        Text("Transmettre", style = MaterialTheme.typography.labelMedium)
                                     }
                                 }
-                            } else if (reel.status == "error") {
+                            }
+                        }
+
+                        // Analyse & Contenu gardé en mémoire
+                        Card(
+                            shape = RoundedCornerShape(16.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(16.dp),
+                                verticalArrangement = Arrangement.spacedBy(14.dp)
+                            ) {
                                 Text(
-                                    text = "Erreur lors de l'analyse IA de ce reel.",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.error
+                                    text = "Ce qu'on a retenu de cette vidéo",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface
                                 )
-                            } else {
-                                if (reel.themes.isNotEmpty()) {
-                                    @OptIn(ExperimentalLayoutApi::class)
-                                    FlowRow(
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                                
+                                if (reel.status == "pending") {
+                                    Surface(
+                                        color = MaterialTheme.colorScheme.secondaryContainer,
+                                        shape = RoundedCornerShape(12.dp),
+                                        modifier = Modifier.fillMaxWidth()
                                     ) {
-                                        reel.themes.forEach { theme ->
-                                            SuggestionChip(
-                                                onClick = { },
-                                                label = { Text(theme) }
+                                        Row(
+                                            modifier = Modifier.padding(16.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(16.dp)
+                                        ) {
+                                            CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                                            Text(
+                                                text = "Je suis en train d'analyser cette vidéo... Reviens dans un instant pour lire les détails !",
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                color = MaterialTheme.colorScheme.onSecondaryContainer
                                             )
                                         }
                                     }
-                                }
-                                
-                                if (reel.summary.isNotEmpty()) {
+                                } else if (reel.status == "error") {
                                     Text(
-                                        text = reel.summary,
-                                        style = MaterialTheme.typography.bodyLarge
+                                        text = "J'ai eu un petit problème pour analyser l'intégralité de ce reel.",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.error
                                     )
+                                } else {
+                                    if (reel.themes.isNotEmpty()) {
+                                        @OptIn(ExperimentalLayoutApi::class)
+                                        FlowRow(
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            reel.themes.forEach { theme ->
+                                                SuggestionChip(
+                                                    onClick = { },
+                                                    label = { Text(theme) },
+                                                    shape = RoundedCornerShape(12.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+                                    
+                                    if (reel.summary.isNotEmpty()) {
+                                        Text(
+                                            text = reel.summary,
+                                            style = MaterialTheme.typography.bodyLarge,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -206,9 +281,10 @@ fun DetailScreen(
         
         if (showDeleteConfirm) {
             AlertDialog(
+                shape = RoundedCornerShape(20.dp),
                 onDismissRequest = { showDeleteConfirm = false },
-                title = { Text("Supprimer ce reel ?") },
-                text = { Text("Cette action est définitive.") },
+                title = { Text("Oublier ce souvenir ?") },
+                text = { Text("Cette action retirera définitivement cette vidéo de ta mémoire RemX.") },
                 confirmButton = {
                     Button(
                         onClick = {
@@ -217,9 +293,10 @@ fun DetailScreen(
                                 onNavigateBack()
                             }
                         },
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                        shape = RoundedCornerShape(12.dp)
                     ) {
-                        Text("Supprimer")
+                        Text("Effacer de ma mémoire")
                     }
                 },
                 dismissButton = {

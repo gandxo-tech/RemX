@@ -6,10 +6,13 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 
-@Database(entities = [Reel::class], version = 1, exportSchema = false)
+@Database(entities = [Reel::class, User::class, RecentQuery::class, Highlight::class], version = 5, exportSchema = false)
 @TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun reelDao(): ReelDao
+    abstract fun userDao(): UserDao
+    abstract fun recentQueryDao(): RecentQueryDao
+    abstract fun highlightDao(): HighlightDao
     
     companion object {
         @Volatile
@@ -21,7 +24,9 @@ abstract class AppDatabase : RoomDatabase() {
                     context.applicationContext,
                     AppDatabase::class.java,
                     "remx_database"
-                ).build()
+                )
+                .fallbackToDestructiveMigration()
+                .build()
                 INSTANCE = instance
                 instance
             }

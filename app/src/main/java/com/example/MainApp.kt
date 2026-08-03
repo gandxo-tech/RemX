@@ -11,6 +11,7 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -23,10 +24,10 @@ import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
-import com.example.data.UserPreferences
 import com.example.ui.screens.ChatScreen
 import com.example.ui.screens.DetailScreen
 import com.example.ui.screens.FeedScreen
@@ -34,25 +35,39 @@ import com.example.ui.screens.OnboardingScreen
 import com.example.ui.screens.ProfileScreen
 
 sealed class Screen(val route: String, val title: String, val icon: @Composable () -> Unit) {
-    object Feed : Screen("feed", "Feed", { Icon(Icons.Filled.List, contentDescription = "Feed") })
-    object Chat : Screen("chat", "Chat", { Icon(Icons.AutoMirrored.Filled.Chat, contentDescription = "Chat") })
-    object Profile : Screen("profile", "Profil", { Icon(Icons.Filled.Person, contentDescription = "Profil") })
+    object Feed : Screen("feed", "Souvenirs", { Icon(Icons.Filled.List, contentDescription = "Souvenirs") })
+    object Chat : Screen("chat", "Mémoire", { Icon(Icons.AutoMirrored.Filled.Chat, contentDescription = "Mémoire") })
+    object Profile : Screen("profile", "Espace", { Icon(Icons.Filled.Person, contentDescription = "Espace") })
 }
 
 @Composable
-fun MainApp() {
-    val context = LocalContext.current
-    val userPreferences = remember { UserPreferences.getInstance(context) }
-    var hasUsername by remember { mutableStateOf(userPreferences.getUsername() != null) }
+fun MainApp(viewModel: MainViewModel = viewModel()) {
+    val appState by viewModel.appState.collectAsState()
 
-    if (!hasUsername) {
-        OnboardingScreen(onComplete = { name ->
-            userPreferences.setUsername(name)
-            hasUsername = true
-        })
-        return
+    androidx.compose.animation.Crossfade(targetState = appState, label = "AppTransition") { state ->
+        when (state) {
+            is AppState.Loading -> {
+                // Optional loading indication
+            }
+            is AppState.NeedsOnboarding -> {
+                OnboardingScreen(
+                    onRegister = { name, password, onResult ->
+                        viewModel.registerUser(name, password, onResult)
+                    },
+                    onLogin = { name, password, onResult ->
+                        viewModel.loginUser(name, password, onResult)
+                    }
+                )
+            }
+            is AppState.Ready -> {
+                MainAppContent()
+            }
+        }
     }
+}
 
+@Composable
+fun MainAppContent() {
     val navController = rememberNavController()
     val items = listOf(Screen.Feed, Screen.Chat, Screen.Profile)
 

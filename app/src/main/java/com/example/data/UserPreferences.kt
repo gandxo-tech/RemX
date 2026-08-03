@@ -12,14 +12,6 @@ class UserPreferences private constructor(context: Context) {
     private val _themeMode = MutableStateFlow(getThemeMode())
     val themeMode: StateFlow<Int> = _themeMode.asStateFlow()
 
-    fun getUsername(): String? {
-        return prefs.getString("username", null)
-    }
-
-    fun setUsername(username: String) {
-        prefs.edit().putString("username", username).apply()
-    }
-
     fun getThemeMode(): Int {
         // 0 = System, 1 = Light, 2 = Dark
         return prefs.getInt("theme_mode", 0)

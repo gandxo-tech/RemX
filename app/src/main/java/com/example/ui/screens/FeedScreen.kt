@@ -1,21 +1,31 @@
 package com.example.ui.screens
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.MutableTransitionState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.HourglassEmpty
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -24,6 +34,9 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.example.data.Reel
+import com.example.ui.components.GradientButton
+import com.example.ui.theme.RemXGradientBrush
+import com.example.ui.components.RemXHeaderDivider
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -34,17 +47,66 @@ fun FeedScreen(
     feedViewModel: FeedViewModel = viewModel()
 ) {
     val feedState by feedViewModel.feedState.collectAsState()
+    val searchQuery by feedViewModel.searchQuery.collectAsState()
     var showAddDialog by remember { mutableStateOf(false) }
     var isRefreshing by remember { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
 
     Scaffold(
         topBar = {
-            TopAppBar(title = { Text("RemX") })
+            Column {
+                TopAppBar(
+                    title = {
+                        Text(
+                            text = "RemX • Mes Souvenirs",
+                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.titleLarge
+                        )
+                    }
+                )
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { feedViewModel.onSearchQueryChange(it) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 6.dp),
+                    placeholder = { Text("Rechercher par caption ou thème...") },
+                    leadingIcon = {
+                        Icon(
+                            Icons.Filled.Search,
+                            contentDescription = "Rechercher",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    },
+                    trailingIcon = {
+                        if (searchQuery.isNotEmpty()) {
+                            IconButton(onClick = { feedViewModel.onSearchQueryChange("") }) {
+                                Icon(
+                                    Icons.Filled.Clear,
+                                    contentDescription = "Effacer la recherche",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    },
+                    singleLine = true,
+                    shape = RoundedCornerShape(16.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                        focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant
+                    )
+                )
+                RemXHeaderDivider()
+            }
         },
         floatingActionButton = {
-            FloatingActionButton(onClick = { showAddDialog = true }) {
-                Icon(Icons.Filled.Add, contentDescription = "Ajouter un Reel")
+            FloatingActionButton(
+                onClick = { showAddDialog = true },
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = Color.White,
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Icon(Icons.Filled.Add, contentDescription = "Confier un Reel")
             }
         }
     ) { innerPadding ->
@@ -53,7 +115,7 @@ fun FeedScreen(
             onRefresh = {
                 coroutineScope.launch {
                     isRefreshing = true
-                    delay(800) // Simulate refresh time, real-time listener handles actual data
+                    delay(800)
                     isRefreshing = false
                 }
             },
@@ -62,14 +124,15 @@ fun FeedScreen(
             when (val state = feedState) {
                 is FeedState.Loading -> {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator()
+                        CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                     }
                 }
                 is FeedState.Error -> {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Text(
                             text = state.message,
-                            color = MaterialTheme.colorScheme.error
+                            color = MaterialTheme.colorScheme.error,
+                            textAlign = TextAlign.Center
                         )
                     }
                 }
@@ -81,12 +144,51 @@ fun FeedScreen(
                                 .padding(32.dp),
                             contentAlignment = Alignment.Center
                         ) {
-                            Text(
-                                text = "Partage un reel depuis Instagram pour commencer ta collection — tu ne perdras plus jamais une info utile",
-                                textAlign = TextAlign.Center,
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(16.dp)
+                            ) {
+                                if (searchQuery.isNotBlank()) {
+                                    Text(
+                                        text = "Aucun souvenir ne correspond à « $searchQuery »",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        textAlign = TextAlign.Center
+                                    )
+                                    Text(
+                                        text = "Essaye avec un autre mot-clé de la description ou du thème.",
+                                        textAlign = TextAlign.Center,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Button(
+                                        onClick = { feedViewModel.onSearchQueryChange("") },
+                                        shape = RoundedCornerShape(12.dp)
+                                    ) {
+                                        Text("Réinitialiser la recherche")
+                                    }
+                                } else {
+                                    Text(
+                                        text = "Aucun souvenir enregistré pour l'instant.",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        textAlign = TextAlign.Center
+                                    )
+                                    Text(
+                                        text = "Partage un reel depuis Instagram vers RemX ou colle son lien ici. Je le garderai en mémoire avec toutes ses infos utiles !",
+                                        textAlign = TextAlign.Center,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    GradientButton(onClick = { showAddDialog = true }) {
+                                        Icon(Icons.Filled.Add, contentDescription = null, tint = Color.White)
+                                        Spacer(Modifier.width(8.dp))
+                                        Text("Confier un premier reel", color = Color.White, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                            }
                         }
                     } else {
                         LazyColumn(
@@ -94,8 +196,59 @@ fun FeedScreen(
                             verticalArrangement = Arrangement.spacedBy(16.dp),
                             modifier = Modifier.fillMaxSize()
                         ) {
-                            items(state.reels, key = { it.id }) { reel ->
-                                ReelItem(reel = reel, onClick = { onNavigateToDetail(reel.id) })
+                            itemsIndexed(state.reels, key = { _, reel -> reel.id }) { index, reel ->
+                                val visibleState = remember(reel.id) { MutableTransitionState(false) }.apply { targetState = true }
+                                val delayMs = (index * 60).coerceAtMost(300)
+
+                                AnimatedVisibility(
+                                    visibleState = visibleState,
+                                    enter = fadeIn(animationSpec = tween(durationMillis = 350, delayMillis = delayMs)) +
+                                            slideInVertically(
+                                                initialOffsetY = { it / 3 },
+                                                animationSpec = tween(durationMillis = 350, delayMillis = delayMs)
+                                            ),
+                                    modifier = Modifier.animateItem()
+                                ) {
+                                    val dismissState = rememberSwipeToDismissBoxState(
+                                        confirmValueChange = { dismissValue ->
+                                            if (dismissValue == SwipeToDismissBoxValue.EndToStart) {
+                                                feedViewModel.deleteReel(reel)
+                                                true
+                                            } else {
+                                                false
+                                            }
+                                        }
+                                    )
+
+                                    SwipeToDismissBox(
+                                        state = dismissState,
+                                        backgroundContent = {
+                                            val color = if (dismissState.targetValue == SwipeToDismissBoxValue.EndToStart) {
+                                                MaterialTheme.colorScheme.errorContainer
+                                            } else {
+                                                MaterialTheme.colorScheme.surface
+                                            }
+                                            Box(
+                                                modifier = Modifier
+                                                    .fillMaxSize()
+                                                    .background(color, RoundedCornerShape(16.dp))
+                                                    .padding(horizontal = 20.dp),
+                                                contentAlignment = Alignment.CenterEnd
+                                            ) {
+                                                if (dismissState.targetValue == SwipeToDismissBoxValue.EndToStart) {
+                                                    Icon(
+                                                        Icons.Filled.Delete,
+                                                        contentDescription = "Oublier ce souvenir",
+                                                        tint = MaterialTheme.colorScheme.onErrorContainer
+                                                    )
+                                                }
+                                            }
+                                        },
+                                        enableDismissFromStartToEnd = false
+                                    ) {
+                                        ReelItem(reel = reel, onClick = { onNavigateToDetail(reel.id) })
+                                    }
+                                }
                             }
                         }
                     }
@@ -118,10 +271,14 @@ fun FeedScreen(
 @Composable
 fun ReelItem(reel: Reel, onClick: () -> Unit) {
     Card(
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+            .clickable(onClick = onClick)
     ) {
         Row(
             modifier = Modifier
@@ -129,36 +286,36 @@ fun ReelItem(reel: Reel, onClick: () -> Unit) {
                 .padding(12.dp),
             horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Thumbnail format story (9:16) with 16dp rounded corners
+            // Thumbnail format 9:16 avec coins arrondis 16dp
             Box(
                 modifier = Modifier
-                    .width(90.dp)
-                    .height(160.dp)
+                    .width(95.dp)
+                    .height(168.dp) // Ratio 9:16
                     .clip(RoundedCornerShape(16.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                    .background(MaterialTheme.colorScheme.surface),
                 contentAlignment = Alignment.Center
             ) {
                 if (reel.thumbnailUrl.isNotEmpty()) {
                     AsyncImage(
                         model = reel.thumbnailUrl,
-                        contentDescription = "Thumbnail",
+                        contentDescription = "Miniature vidéo",
                         contentScale = ContentScale.Crop,
                         modifier = Modifier.fillMaxSize()
                     )
                 } else {
                     Icon(
                         imageVector = if (reel.status == "error") Icons.Filled.Error else Icons.Filled.HourglassEmpty,
-                        contentDescription = "Placeholder",
+                        contentDescription = "En attente",
                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
             
-            // Details
+            // Context & Details
             Column(
                 modifier = Modifier
                     .weight(1f)
-                    .heightIn(min = 160.dp),
+                    .heightIn(min = 168.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 if (reel.author.isNotEmpty()) {
@@ -176,7 +333,7 @@ fun ReelItem(reel: Reel, onClick: () -> Unit) {
                         shape = RoundedCornerShape(8.dp)
                     ) {
                         Text(
-                            text = "Analyse en cours…",
+                            text = "En train de m'en souvenir…",
                             style = MaterialTheme.typography.labelSmall,
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                             color = MaterialTheme.colorScheme.onSecondaryContainer
@@ -184,18 +341,30 @@ fun ReelItem(reel: Reel, onClick: () -> Unit) {
                     }
                 } else if (reel.status == "error") {
                     Text(
-                        text = "Erreur",
+                        text = "Petit accroc de lecture",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.error
                     )
                 }
                 
                 Text(
-                    text = reel.caption.takeIf { it.isNotEmpty() } ?: if (reel.status == "pending") "En attente du texte..." else "Aucun texte.",
+                    text = reel.caption.takeIf { it.isNotEmpty() } ?: if (reel.status == "pending") "Analyse du contenu en cours..." else "Aucune description.",
                     style = MaterialTheme.typography.bodyMedium,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    color = MaterialTheme.colorScheme.onSurface
                 )
+
+                if (reel.summary.isNotEmpty()) {
+                    Text(
+                        text = reel.summary,
+                        style = MaterialTheme.typography.bodySmall,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
                 
                 Spacer(modifier = Modifier.weight(1f))
                 
@@ -209,7 +378,8 @@ fun ReelItem(reel: Reel, onClick: () -> Unit) {
                             SuggestionChip(
                                 onClick = { },
                                 label = { Text(theme, style = MaterialTheme.typography.labelSmall) },
-                                modifier = Modifier.height(24.dp)
+                                modifier = Modifier.height(26.dp),
+                                shape = RoundedCornerShape(12.dp)
                             )
                         }
                     }
@@ -224,16 +394,30 @@ fun AddReelDialog(onDismiss: () -> Unit, onAdd: (String) -> Unit) {
     var url by remember { mutableStateOf("") }
     
     AlertDialog(
+        shape = RoundedCornerShape(20.dp),
         onDismissRequest = onDismiss,
-        title = { Text("Ajouter un Reel") },
-        text = {
-            OutlinedTextField(
-                value = url,
-                onValueChange = { url = it },
-                label = { Text("URL Instagram") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth()
+        title = {
+            Text(
+                "Confier un Reel",
+                fontWeight = FontWeight.Bold
             )
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    "Colle le lien Instagram d'un reel pour que je l'ajoute à ta mémoire.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                OutlinedTextField(
+                    value = url,
+                    onValueChange = { url = it },
+                    label = { Text("Lien Instagram") },
+                    singleLine = true,
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
         },
         confirmButton = {
             Button(
@@ -241,9 +425,10 @@ fun AddReelDialog(onDismiss: () -> Unit, onAdd: (String) -> Unit) {
                     if (url.isNotBlank()) {
                         onAdd(url.trim())
                     }
-                }
+                },
+                shape = RoundedCornerShape(12.dp)
             ) {
-                Text("Ajouter")
+                Text("Se souvenir")
             }
         },
         dismissButton = {
