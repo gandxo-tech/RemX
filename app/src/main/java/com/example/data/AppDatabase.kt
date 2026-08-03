@@ -6,13 +6,14 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 
-@Database(entities = [Reel::class, User::class, RecentQuery::class, Highlight::class], version = 5, exportSchema = false)
+@Database(entities = [Reel::class, User::class, RecentQuery::class, Highlight::class, ChatMessageEntity::class], version = 7, exportSchema = false)
 @TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun reelDao(): ReelDao
     abstract fun userDao(): UserDao
     abstract fun recentQueryDao(): RecentQueryDao
     abstract fun highlightDao(): HighlightDao
+    abstract fun chatMessageDao(): ChatMessageDao
     
     companion object {
         @Volatile

@@ -6,14 +6,16 @@ import androidx.lifecycle.viewModelScope
 import com.example.BuildConfig
 import com.example.api.*
 import com.example.data.AppDatabase
+import com.example.data.ChatMessageDao
+import com.example.data.ChatMessageEntity
+import com.example.data.ChatSessionSummary
 import com.example.data.Highlight
-import com.example.data.HighlightDao
 import com.example.data.RecentQuery
 import com.example.data.Reel
 import com.example.data.ReelRepository
-import com.squareup.moshi.JsonAdapter
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -28,31 +30,119 @@ data class ChatMessage(
     val id: String = UUID.randomUUID().toString(),
     val text: String,
     val role: Role,
-    val referencedReels: List<Reel> = emptyList()
+    val referencedReels: List<Reel> = emptyList(),
+    val timestamp: Long = System.currentTimeMillis()
 )
 
 class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = ReelRepository(AppDatabase.getDatabase(application).reelDao())
     private val recentQueryDao = AppDatabase.getDatabase(application).recentQueryDao()
     private val highlightDao = AppDatabase.getDatabase(application).highlightDao()
+    private val chatMessageDao = AppDatabase.getDatabase(application).chatMessageDao()
     
     val recentQueries = recentQueryDao.getRecentQueries()
     val highlights = highlightDao.getAllHighlights()
+    val allReelsFlow = repository.allReels
+
+    private val _messages = MutableStateFlow<List<ChatMessage>>(emptyList())
+    val messages: StateFlow<List<ChatMessage>> = _messages.asStateFlow()
+
+    private val _sessions = MutableStateFlow<List<ChatSessionSummary>>(emptyList())
+    val sessions: StateFlow<List<ChatSessionSummary>> = _sessions.asStateFlow()
+
+    private val _currentSessionId = MutableStateFlow<String>(UUID.randomUUID().toString())
+    val currentSessionId: StateFlow<String> = _currentSessionId.asStateFlow()
+
+    private val _currentSessionTitle = MutableStateFlow<String>("Nouvelle discussion")
+    val currentSessionTitle: StateFlow<String> = _currentSessionTitle.asStateFlow()
+
+    private val _isTyping = MutableStateFlow(false)
+    val isTyping: StateFlow<Boolean> = _isTyping.asStateFlow()
+
+    private var currentUserId: String? = null
+    private var messageObserveJob: Job? = null
+    private var sessionObserveJob: Job? = null
+
+    private val apiKey = BuildConfig.GEMINI_API_KEY
+    private val moshi = Moshi.Builder().add(KotlinJsonAdapterFactory()).build()
+
+    fun loadHistoryForUser(userId: String) {
+        if (currentUserId == userId) return
+        currentUserId = userId
+
+        // Observe all sessions for this user
+        sessionObserveJob?.cancel()
+        sessionObserveJob = viewModelScope.launch {
+            chatMessageDao.getSessionsForUser(userId).collect { summaries ->
+                _sessions.value = summaries
+                // If current session is empty or doesn't exist in summaries, we remain on current session
+                val active = summaries.find { it.sessionId == _currentSessionId.value }
+                if (active != null) {
+                    _currentSessionTitle.value = active.sessionTitle
+                }
+            }
+        }
+
+        // Load messages for current session
+        observeSessionMessages(userId, _currentSessionId.value)
+    }
+
+    private fun observeSessionMessages(userId: String, sessionId: String) {
+        messageObserveJob?.cancel()
+        messageObserveJob = viewModelScope.launch {
+            chatMessageDao.getMessagesForSession(userId, sessionId).collect { entities ->
+                val reels = repository.allReels.first()
+                val mapped = entities.map { entity ->
+                    val referenced = reels.filter { entity.referencedReelIds.contains(it.id) }
+                    ChatMessage(
+                        id = entity.id,
+                        text = entity.text,
+                        role = if (entity.role == "USER") Role.USER else Role.MODEL,
+                        referencedReels = referenced,
+                        timestamp = entity.timestamp
+                    )
+                }
+                _messages.value = mapped
+            }
+        }
+    }
+
+    fun startNewSession(userId: String) {
+        val newId = UUID.randomUUID().toString()
+        _currentSessionId.value = newId
+        _currentSessionTitle.value = "Nouvelle discussion"
+        _messages.value = emptyList()
+        observeSessionMessages(userId, newId)
+    }
+
+    fun selectSession(sessionId: String, userId: String) {
+        _currentSessionId.value = sessionId
+        val session = _sessions.value.find { it.sessionId == sessionId }
+        _currentSessionTitle.value = session?.sessionTitle ?: "Discussion"
+        observeSessionMessages(userId, sessionId)
+    }
+
+    fun deleteSession(sessionId: String, userId: String) {
+        viewModelScope.launch {
+            chatMessageDao.deleteSession(userId, sessionId)
+            if (_currentSessionId.value == sessionId) {
+                startNewSession(userId)
+            }
+        }
+    }
+
+    fun clearAllHistory(userId: String) {
+        viewModelScope.launch {
+            chatMessageDao.clearHistoryForUser(userId)
+            startNewSession(userId)
+        }
+    }
 
     fun saveHighlight(text: String) {
         viewModelScope.launch {
             highlightDao.insertHighlight(Highlight(text = text))
         }
     }
-
-    private val _messages = MutableStateFlow<List<ChatMessage>>(emptyList())
-    val messages: StateFlow<List<ChatMessage>> = _messages.asStateFlow()
-
-    private val _isTyping = MutableStateFlow(false)
-    val isTyping: StateFlow<Boolean> = _isTyping.asStateFlow()
-
-    private val apiKey = BuildConfig.GEMINI_API_KEY
-    private val moshi = Moshi.Builder().add(KotlinJsonAdapterFactory()).build()
 
     // Structured output class
     private data class GeminiParsedResponse(
@@ -61,56 +151,120 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     )
 
     fun sendMessage(text: String, userId: String) {
+        loadHistoryForUser(userId)
+        
+        // If this is the first message in the session, derive a title
+        if (_messages.value.isEmpty()) {
+            val autoTitle = text.take(35).trim().ifEmpty { "Discussion" }
+            _currentSessionTitle.value = autoTitle
+        }
+
+        val activeSessionId = _currentSessionId.value
+        val activeTitle = _currentSessionTitle.value
+
         val userMsg = ChatMessage(text = text, role = Role.USER)
         _messages.value = _messages.value + userMsg
         _isTyping.value = true
 
         viewModelScope.launch {
             try {
+                // Persist user message in Room DB
+                chatMessageDao.insertMessage(
+                    ChatMessageEntity(
+                        id = userMsg.id,
+                        userId = userId,
+                        sessionId = activeSessionId,
+                        sessionTitle = activeTitle,
+                        text = text,
+                        role = "USER",
+                        timestamp = userMsg.timestamp
+                    )
+                )
+
                 // Save recent query
                 recentQueryDao.insertQuery(RecentQuery(query = text))
                 recentQueryDao.deleteOldQueries()
 
-                // 1. Get embedding for the user's question
-                val embedReq = EmbedContentRequest(
-                    model = "models/gemini-embedding-2-preview",
-                    content = Content(parts = listOf(Part(text = text)))
-                )
-                val embedRes = RetrofitClient.service.embedContent(apiKey, embedReq)
-                val queryEmbedding = embedRes.embedding?.values ?: emptyList()
+                val allUserReels = repository.allReels.first()
 
-                var relevantReels = emptyList<Reel>()
+                // 1. Semantic Embedding Search
+                val relevantReels = mutableListOf<Reel>()
                 
-                if (queryEmbedding.isNotEmpty()) {
-                    // 2. Find nearest reels in Room
-                    val allReels = repository.allReels.first().filter { 
-                        it.userId == userId && it.status == "done" && it.embedding.isNotEmpty()
-                    }
+                try {
+                    val embedReq = EmbedContentRequest(
+                        model = "models/gemini-embedding-2-preview",
+                        content = Content(parts = listOf(Part(text = text)))
+                    )
+                    val embedRes = RetrofitClient.service.embedContent(apiKey, embedReq)
+                    val queryEmbedding = embedRes.embedding?.values ?: emptyList()
 
-                    val scoredReels = allReels.map { reel ->
-                        val score = cosineSimilarity(queryEmbedding, reel.embedding)
-                        Pair(reel, score)
-                    }
+                    if (queryEmbedding.isNotEmpty()) {
+                        val allWithEmbeddings = allUserReels.filter { 
+                            it.embedding.isNotEmpty()
+                        }
 
-                    relevantReels = scoredReels.sortedByDescending { it.second }.take(5).map { it.first }
+                        val scoredReels = allWithEmbeddings.map { reel ->
+                            val score = cosineSimilarity(queryEmbedding, reel.embedding)
+                            Pair(reel, score)
+                        }
+
+                        val semanticHits = scoredReels.filter { it.second > 0.3 }
+                            .sortedByDescending { it.second }
+                            .map { it.first }
+                        
+                        relevantReels.addAll(semanticHits)
+                    }
+                } catch (e: Exception) {
+                    e.printStackTrace()
                 }
+
+                // 2. Keyword Fallback
+                val queryLower = text.lowercase()
+                val terms = queryLower.split(" ", ",", "'", "-", "?", "!").filter { it.length > 2 }
+
+                val keywordHits = allUserReels.filter { reel ->
+                    val content = "${reel.caption} ${reel.summary} ${reel.author} ${reel.themes.joinToString(" ")} ${reel.transcript}".lowercase()
+                    terms.any { term -> content.contains(term) }
+                }
+
+                for (reel in keywordHits) {
+                    if (relevantReels.none { it.id == reel.id }) {
+                        relevantReels.add(reel)
+                    }
+                }
+
+                // If small collection (e.g. <= 10 reels), include all to give full contextual awareness
+                if (allUserReels.isNotEmpty() && relevantReels.isEmpty()) {
+                    relevantReels.addAll(allUserReels.take(5))
+                }
+
+                val topRelevant = relevantReels.take(6)
 
                 // 3. Prompt Gemini with structured output request
                 val systemInstruction = """
-                    Tu es un assistant IA pour l'application RemX. Ton but est d'aider l'utilisateur à retrouver ou à se souvenir de ce qu'il a enregistré.
-                    Tu vas recevoir la question de l'utilisateur et une liste de "Reels" (vidéos/posts) pertinents trouvés dans sa base de données.
-                    Réponds à la question en te basant UNIQUEMENT sur ces reels.
-                    Si aucun reel ne semble pertinent, dis honnêtement que tu n'as rien trouvé qui correspond à sa demande, plutôt que d'inventer.
+                    Tu es l'assistant de mémoire visuelle IA de RemX, conçu par GBAGUIDI Exaucé (Gandxo).
+                    Ton rôle est d'aider l'utilisateur à retrouver ses souvenirs et Reels sauvegardés sur Instagram.
                     
-                    Tu DOIS répondre au format JSON strict suivant :
+                    Tu as accès aux Reels extraits de la mémoire locale de l'utilisateur.
+                    
+                    Instructions :
+                    1. Réponds de façon chaleureuse, précise et structurée.
+                    2. Si des Reels correspondent, cite l'auteur et les détails pertinents (recettes, astuces, tutoriels).
+                    3. Si aucun Reel ne correspond exactement, donne des conseils utiles ou des pistes basées sur la mémoire disponible.
+                    
+                    Format JSON obligatoire :
                     {
-                        "answer": "Ta réponse texte formatée",
-                        "reelIds": ["id1", "id2"] // Les IDs des reels que tu as utilisés pour formuler ta réponse
+                        "answer": "Texte de la réponse",
+                        "reelIds": ["id1", "id2"]
                     }
                 """.trimIndent()
 
-                val contextStr = relevantReels.joinToString(separator = "\n\n") {
-                    "Reel ID: ${it.id}\nCaption: ${it.caption}\nSummary: ${it.summary}\nTranscript (excerpt): ${it.transcript.take(300)}"
+                val contextStr = if (topRelevant.isNotEmpty()) {
+                    topRelevant.joinToString(separator = "\n\n") {
+                        "Reel ID: ${it.id}\nAuteur: ${it.author}\nCaption: ${it.caption}\nSummary: ${it.summary}\nTranscript (excerpt): ${it.transcript.take(300)}"
+                    }
+                } else {
+                    "Aucun Reel sauvegardé en mémoire pour le moment."
                 }
 
                 val prompt = "Question: $text\n\nReels disponibles:\n$contextStr"
@@ -140,7 +294,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 val response = RetrofitClient.service.generateContent(apiKey, req)
                 val responseText = response.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text ?: "{}"
                 
-                // 4. Parse the JSON and create model message
+                // 4. Parse JSON
                 val adapter = moshi.adapter(GeminiParsedResponse::class.java)
                 val parsed = try {
                     adapter.fromJson(responseText)
@@ -148,17 +302,51 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     null
                 }
 
-                val answerText = parsed?.answer ?: "Désolé, je n'ai pas pu générer une réponse."
-                val usedReelIds = parsed?.reelIds ?: emptyList()
-                val usedReels = relevantReels.filter { usedReelIds.contains(it.id) }
+                val answerText = parsed?.answer ?: if (topRelevant.isNotEmpty()) {
+                    "J'ai retrouvé ces éléments dans vos Reels sauvegardés !"
+                } else {
+                    "Je n'ai pas trouvé ce souvenir exact dans votre mémoire RemX. Partagez un nouveau Reel depuis Instagram pour l'analyser !"
+                }
+                val usedReelIds = parsed?.reelIds ?: topRelevant.map { it.id }
+                val usedReels = topRelevant.filter { usedReelIds.contains(it.id) }
 
-                val modelMsg = ChatMessage(text = answerText, role = Role.MODEL, referencedReels = usedReels)
+                val modelMsg = ChatMessage(
+                    text = answerText,
+                    role = Role.MODEL,
+                    referencedReels = if (usedReels.isNotEmpty()) usedReels else topRelevant.take(2)
+                )
                 _messages.value = _messages.value + modelMsg
+
+                // Persist model message in Room DB
+                chatMessageDao.insertMessage(
+                    ChatMessageEntity(
+                        id = modelMsg.id,
+                        userId = userId,
+                        sessionId = activeSessionId,
+                        sessionTitle = activeTitle,
+                        text = answerText,
+                        role = "MODEL",
+                        timestamp = modelMsg.timestamp,
+                        referencedReelIds = modelMsg.referencedReels.map { it.id }
+                    )
+                )
 
             } catch (e: Exception) {
                 e.printStackTrace()
-                val errorMsg = ChatMessage(text = "Oups, une erreur est survenue (${e.message}).", role = Role.MODEL)
+                val errorMsg = ChatMessage(text = "Oups, une erreur est survenue lors de la consultation de l'IA Gemini.", role = Role.MODEL)
                 _messages.value = _messages.value + errorMsg
+                
+                chatMessageDao.insertMessage(
+                    ChatMessageEntity(
+                        id = errorMsg.id,
+                        userId = userId,
+                        sessionId = activeSessionId,
+                        sessionTitle = activeTitle,
+                        text = errorMsg.text,
+                        role = "MODEL",
+                        timestamp = errorMsg.timestamp
+                    )
+                )
             } finally {
                 _isTyping.value = false
             }
