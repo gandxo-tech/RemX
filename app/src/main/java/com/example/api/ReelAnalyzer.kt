@@ -123,44 +123,68 @@ object ReelAnalyzer {
     }
 
     private fun createFallback(url: String): ReelAnalysisResult {
-        val hash = url.hashCode()
-        val authors = listOf("alex_creativ", "sophie_travels", "chef_julien", "mindset_daily", "tech_insider")
-        val captions = listOf(
-            "Les 5 habitudes matinales pour décupler sa productivité sans stress",
-            "Recette express : pâtes crémeuses à l'ail et aux herbes fraîches",
-            "Les plus beaux spots secrets à visiter absolument cette année",
-            "Comment structurer tes journées pour retrouver un équilibre de vie",
-            "Tutoriel rapide pour maîtriser la prise de vue sur smartphone"
-        )
-        val summaries = listOf(
-            "Ce reel explique comment organiser sa matinée avec la règle des 20/20/20. L'auteur insiste sur la méditation et l'écriture dès le réveil.",
-            "Une méthode simple et rapide en 3 étapes pour réussir des pâtes crémeuses sans crème lourde. Idéal pour un repas savoureux et léger.",
-            "Découverte de paysages préservés et de conseils pratiques pour voyager sereinement sans les foules touristiques.",
-            "Conseils pratiques d'organisation pour prioriser tes tâches quotidiennes importantes sans céder à la surcharge mentale.",
-            "Techniques d'éclairage et de cadrage naturel pour donner immédiatement un aspect professionnel à toutes tes vidéos courtes."
-        )
-        val themesList = listOf(
-            listOf("Productivité", "Habitudes", "Bien-être"),
-            listOf("Cuisine", "Recette", "Gourmand"),
-            listOf("Voyage", "Escapade", "Nature"),
-            listOf("Organisation", "Mental", "Equilibre"),
-            listOf("Vidéo", "Création", "Tech")
-        )
-        val thumbnails = listOf(
-            "https://images.unsplash.com/photo-1506784983877-45594efa4cbe?w=600&q=80",
-            "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=600&q=80",
-            "https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?w=600&q=80",
-            "https://images.unsplash.com/photo-1499750310107-5fef28a66643?w=600&q=80",
-            "https://images.unsplash.com/photo-1516035069371-29a1b244cc32?w=600&q=80"
-        )
+        // Try to extract metadata if page is accessible
+        val extracted = tryExtractMetaTags(url)
+        if (extracted != null) return extracted
 
-        val idx = kotlin.math.abs(hash) % authors.size
+        val cleanUrl = url.trim()
+        val shortcodeRegex = Regex("""instagram\.com/(?:reel|reels|p)/([A-Za-z0-9_-]+)""", RegexOption.IGNORE_CASE)
+        val userRegex = Regex("""instagram\.com/([A-Za-z0-9_.]+)/(?:reel|reels|p)/""", RegexOption.IGNORE_CASE)
+
+        val shortcode = shortcodeRegex.find(cleanUrl)?.groupValues?.get(1)
+        val username = userRegex.find(cleanUrl)?.groupValues?.get(1)
+
+        val author = username ?: if (!shortcode.isNullOrBlank()) "instagram_user" else "createur_instagram"
+        val caption = if (!shortcode.isNullOrBlank()) {
+            "Reel Instagram ($shortcode)"
+        } else if (cleanUrl.contains("instagram")) {
+            "Reel sauvegardé depuis Instagram"
+        } else {
+            "Lien sauvegardé dans RemX"
+        }
+
+        val summary = "Vidéo sauvegardée depuis Instagram. Consultable et organisée dans votre mémoire RemX."
+        val themes = listOf("Instagram", "Reel", "Sauvegardé")
+        val thumbnail = "https://images.unsplash.com/photo-1611162617213-7d7a39e9b1d7?w=600&q=80"
+
         return ReelAnalysisResult(
-            author = authors[idx],
-            caption = captions[idx],
-            summary = summaries[idx],
-            themes = themesList[idx],
-            thumbnailUrl = thumbnails[idx]
+            author = author,
+            caption = caption,
+            summary = summary,
+            themes = themes,
+            thumbnailUrl = thumbnail
         )
+    }
+
+    private fun tryExtractMetaTags(url: String): ReelAnalysisResult? {
+        return try {
+            val connection = java.net.URL(url).openConnection() as java.net.HttpURLConnection
+            connection.connectTimeout = 2500
+            connection.readTimeout = 2500
+            connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+            val stream = connection.inputStream
+            val html = stream.bufferedReader().use { it.readText() }
+
+            val titleMatch = Regex("""<meta\s+property="og:title"\s+content="([^"]+)"""", RegexOption.IGNORE_CASE).find(html)
+                ?: Regex("""<title>([^<]+)</title>""", RegexOption.IGNORE_CASE).find(html)
+            val descMatch = Regex("""<meta\s+property="og:description"\s+content="([^"]+)"""", RegexOption.IGNORE_CASE).find(html)
+            val imgMatch = Regex("""<meta\s+property="og:image"\s+content="([^"]+)"""", RegexOption.IGNORE_CASE).find(html)
+
+            val rawTitle = titleMatch?.groupValues?.get(1)?.trim()
+            val rawDesc = descMatch?.groupValues?.get(1)?.trim()
+            val rawImg = imgMatch?.groupValues?.get(1)?.trim()
+
+            if (!rawTitle.isNullOrBlank() || !rawDesc.isNullOrBlank()) {
+                ReelAnalysisResult(
+                    author = "instagram_creator",
+                    caption = rawTitle?.take(100) ?: "Reel Instagram",
+                    summary = rawDesc?.take(200) ?: "Reel sauvegardé dans RemX.",
+                    themes = listOf("Instagram", "Reel", "Sauvegardé"),
+                    thumbnailUrl = rawImg ?: "https://images.unsplash.com/photo-1611162617213-7d7a39e9b1d7?w=600&q=80"
+                )
+            } else null
+        } catch (e: Exception) {
+            null
+        }
     }
 }

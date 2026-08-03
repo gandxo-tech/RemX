@@ -1,5 +1,8 @@
 package com.example.ui.screens
 
+import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
+import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
+import androidx.compose.foundation.lazy.staggeredgrid.itemsIndexed
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.core.tween
@@ -8,8 +11,6 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -31,6 +32,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.example.data.Reel
@@ -191,9 +193,11 @@ fun FeedScreen(
                             }
                         }
                     } else {
-                        LazyColumn(
+                        LazyVerticalStaggeredGrid(
+                            columns = StaggeredGridCells.Fixed(2),
                             contentPadding = PaddingValues(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(16.dp),
+                            horizontalArrangement = Arrangement.spacedBy(16.dp),
+                            verticalItemSpacing = 16.dp,
                             modifier = Modifier.fillMaxSize()
                         ) {
                             itemsIndexed(state.reels, key = { _, reel -> reel.id }) { index, reel ->
@@ -206,8 +210,7 @@ fun FeedScreen(
                                             slideInVertically(
                                                 initialOffsetY = { it / 3 },
                                                 animationSpec = tween(durationMillis = 350, delayMillis = delayMs)
-                                            ),
-                                    modifier = Modifier.animateItem()
+                                            )
                                 ) {
                                     val dismissState = rememberSwipeToDismissBoxState(
                                         confirmValueChange = { dismissValue ->
@@ -280,18 +283,14 @@ fun ReelItem(reel: Reel, onClick: () -> Unit) {
             .fillMaxWidth()
             .clickable(onClick = onClick)
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
+        Column(
+            modifier = Modifier.fillMaxWidth()
         ) {
-            // Thumbnail format 9:16 avec coins arrondis 16dp
+            // Thumbnail format dynamic pour le staggered grid
             Box(
                 modifier = Modifier
-                    .width(95.dp)
-                    .height(168.dp) // Ratio 9:16
-                    .clip(RoundedCornerShape(16.dp))
+                    .fillMaxWidth()
+                    .aspectRatio(0.75f) // Ratio vertical style image
                     .background(MaterialTheme.colorScheme.surface),
                 contentAlignment = Alignment.Center
             ) {
@@ -314,72 +313,58 @@ fun ReelItem(reel: Reel, onClick: () -> Unit) {
             // Context & Details
             Column(
                 modifier = Modifier
-                    .weight(1f)
-                    .heightIn(min = 168.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                    .fillMaxWidth()
+                    .padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 if (reel.author.isNotEmpty()) {
                     Text(
                         text = "@${reel.author}",
-                        style = MaterialTheme.typography.labelMedium,
+                        style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.primary,
                         fontWeight = FontWeight.Bold
                     )
                 }
                 
                 if (reel.status == "pending") {
-                    Surface(
-                        color = MaterialTheme.colorScheme.secondaryContainer,
-                        shape = RoundedCornerShape(8.dp)
-                    ) {
-                        Text(
-                            text = "En train de m'en souvenir…",
-                            style = MaterialTheme.typography.labelSmall,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                            color = MaterialTheme.colorScheme.onSecondaryContainer
-                        )
-                    }
+                    Text(
+                        text = "Analyse en cours...",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                        modifier = Modifier
+                            .background(MaterialTheme.colorScheme.secondaryContainer, RoundedCornerShape(4.dp))
+                            .padding(horizontal = 4.dp, vertical = 2.dp)
+                    )
                 } else if (reel.status == "error") {
                     Text(
-                        text = "Petit accroc de lecture",
+                        text = "Erreur",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.error
                     )
                 }
                 
                 Text(
-                    text = reel.caption.takeIf { it.isNotEmpty() } ?: if (reel.status == "pending") "Analyse du contenu en cours..." else "Aucune description.",
-                    style = MaterialTheme.typography.bodyMedium,
+                    text = reel.caption.takeIf { it.isNotEmpty() } ?: if (reel.status == "pending") "En cours..." else "Sans description",
+                    style = MaterialTheme.typography.bodySmall,
                     fontWeight = FontWeight.SemiBold,
-                    maxLines = 1,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                     color = MaterialTheme.colorScheme.onSurface
                 )
-
-                if (reel.summary.isNotEmpty()) {
-                    Text(
-                        text = reel.summary,
-                        style = MaterialTheme.typography.bodySmall,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                
-                Spacer(modifier = Modifier.weight(1f))
                 
                 if (reel.themes.isNotEmpty()) {
                     @OptIn(ExperimentalLayoutApi::class)
                     FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                        modifier = Modifier.padding(top = 4.dp)
                     ) {
-                        reel.themes.take(3).forEach { theme ->
+                        reel.themes.take(2).forEach { theme ->
                             SuggestionChip(
                                 onClick = { },
-                                label = { Text(theme, style = MaterialTheme.typography.labelSmall) },
-                                modifier = Modifier.height(26.dp),
-                                shape = RoundedCornerShape(12.dp)
+                                label = { Text(theme, style = MaterialTheme.typography.labelSmall, fontSize = 10.sp) },
+                                modifier = Modifier.height(24.dp),
+                                shape = RoundedCornerShape(8.dp)
                             )
                         }
                     }

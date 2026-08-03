@@ -187,6 +187,53 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
                 val allUserReels = repository.allReels.first()
 
+                if (apiKey.isBlank() || apiKey == "MY_GEMINI_API_KEY") {
+                    val queryLower = text.lowercase()
+                    val terms = queryLower.split(" ", ",", "'", "-", "?", "!").filter { it.length > 2 }
+
+                    val matchedReels = if (terms.isEmpty()) {
+                        allUserReels.take(4)
+                    } else {
+                        allUserReels.filter { reel ->
+                            val content = "${reel.caption} ${reel.summary} ${reel.author} ${reel.themes.joinToString(" ")} ${reel.transcript}".lowercase()
+                            terms.any { term -> content.contains(term) }
+                        }
+                    }
+
+                    val answerText = if (allUserReels.isEmpty()) {
+                        "Vous n'avez encore aucun Reel enregistré dans votre mémoire RemX. Partagez des liens Instagram pour les sauvegarder ici !"
+                    } else if (matchedReels.isNotEmpty()) {
+                        "Analyse locale RemX (${matchedReels.size} résultat(s) trouvé(s)) :\n" +
+                                matchedReels.take(3).joinToString("\n• ", prefix = "• ") { reel ->
+                                    if (reel.caption.isNotBlank()) "${reel.caption} (par @${reel.author})" else "${reel.summary} (par @${reel.author})"
+                                }
+                    } else {
+                        "Aucun souvenir spécifique correspondant à \"$text\" n'a été trouvé dans vos souvenirs. Voici vos derniers Reels sauvegardés :"
+                    }
+
+                    val referenced = if (matchedReels.isNotEmpty()) matchedReels.take(4) else allUserReels.take(3)
+
+                    val fallbackMsg = ChatMessage(
+                        text = answerText,
+                        role = Role.MODEL,
+                        referencedReels = referenced
+                    )
+                    _messages.value = _messages.value + fallbackMsg
+                    chatMessageDao.insertMessage(
+                        ChatMessageEntity(
+                            id = fallbackMsg.id,
+                            userId = userId,
+                            sessionId = activeSessionId,
+                            sessionTitle = activeTitle,
+                            text = fallbackMsg.text,
+                            role = "MODEL",
+                            timestamp = fallbackMsg.timestamp,
+                            referencedReelIds = fallbackMsg.referencedReels.map { it.id }
+                        )
+                    )
+                    return@launch
+                }
+
                 // 1. Semantic Embedding Search
                 val relevantReels = mutableListOf<Reel>()
                 
