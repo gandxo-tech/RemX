@@ -1,77 +1,112 @@
-# 🚀 RemX — Your Visual Second Brain & Instagram Reels AI Assistant
+<div align="center">
 
-![RemX Banner](https://images.unsplash.com/photo-1611162617213-7d7a39e9b1d7?w=1200&q=80)
+  <img src="app/src/main/res/drawable/img_remx_app_icon_1785717561059.jpg" alt="RemX Logo" width="140" height="140" style="border-radius: 28px; box-shadow: 0 10px 25px rgba(0,0,0,0.3);" />
 
-> **"Ne perdez plus jamais une bonne idée, une recette ou un conseil partagé sur Instagram."**
+  # 🚀 RemX — Your Visual Second Brain & Instagram Reels AI Assistant
 
-**RemX** est une application Android moderne développée avec **Jetpack Compose** et propulsée par l'intelligence artificielle **Google Gemini 1.5/2.0**. Elle transforme le flux éphémère de vos Instagram Reels en un second cerveau visuel interactif, consultable et recherchable instantanément.
+  [![Android](https://img.shields.io/badge/Platform-Android_8.0%2B-green.svg?style=for-the-badge&logo=android)](https://developer.android.com/)
+  [![Kotlin](https://img.shields.io/badge/Language-Kotlin_100%25-purple.svg?style=for-the-badge&logo=kotlin)](https://kotlinlang.org/)
+  [![Jetpack Compose](https://img.shields.io/badge/UI-Jetpack_Compose_M3-4285F4.svg?style=for-the-badge&logo=jetpackcompose)](https://developer.android.com/jetpack/compose)
+  [![Google Gemini](https://img.shields.io/badge/AI-Google_Gemini_2.0-FF6F00.svg?style=for-the-badge&logo=google)](https://ai.google.dev/)
+  [![Author](https://img.shields.io/badge/Developer-GBAGUIDI_Exauc%C3%A9_(Gandxo)-blueviolet.svg?style=for-the-badge)](https://github.com/)
 
-> 👤 **Conçu et développé avec passion par :** **GBAGUIDI Exaucé alias Gandxo**
+  <p align="center">
+    <strong>"Ne perdez plus jamais une bonne idée, une recette ou un conseil partagé sur Instagram."</strong>
+  </p>
+
+</div>
 
 ---
 
-## ✨ Fonctionnalités Principales
+### 🌟 Présentation de l'Application
 
-- 📲 **Partage Direct depuis Instagram** : Partagez n'importe quel lien Reel vers **RemX** directement via le menu système d'Android.
-- ⚡ **Analyse Automatique Gemini AI** : Extraie automatiquement l'auteur, une légende explicite, un résumé concis en 2 phrases et des mots-clés thématiques.
-- 💬 **Assistant Chat Conversationnel (Façon WhatsApp)** : Discutez avec votre mémoire visuelle pour retrouver instantanément la recette de la semaine ou les astuces de voyage enregistrées.
-- 🔔 **Notifications Locales Android** : Recevez une alerte Push dès que l'analyse en arrière-plan d'un Reel partagé est finalisée.
-- 🔒 **Compte Privé & Sécurisé (Room Database)** : Système d'authentification local avec pseudo et mot de passe chiffré. Vos souvenirs ne quittent jamais votre téléphone !
-- 🎨 **Interface Moderne Material 3 & Thème Sombre/Clair** : Expérience fluide avec onboarding immersif, animations soignées et support multi-écrans.
-- 📂 **Exportation & Importation JSON** : Sauvegardez et restaurez l'intégralité de vos données en un clic.
-- 📜 **Pages Légales Intégrées** : Accès direct aux Mentions Légales, Politique de Confidentialité et À Propos.
+**RemX** est une application Android de nouvelle génération conçue pour capturer, organiser et interroger l'ensemble de vos **Instagram Reels** sauvegardés. 
+
+Grâce à l'intégration poussée de **Google Gemini AI**, l'application analyse automatiquement chaque Reel partagé, extrait les étapes clés et crée un résumé structuré sous forme de fiche de connaissance. Vous pouvez ensuite interroger votre mémoire visuelle grâce à un **Assistant Chat conversationnel** sécurisé.
+
+> 👤 **Conçu & Développé avec passion par :** **GBAGUIDI Exaucé alias Gandxo**
+
+---
+
+## ✨ Fonctionnalités Clés
+
+- 📱 **Partage Direct via Intent Android** : Partagez un Reel depuis l'application Instagram vers **RemX** en 1 clic.
+- ⚡ **Analyse Automatique Gemini 2.0** : Extraction de l'auteur, titre, légende, résumé en 1-2 phrases et tags thématiques.
+- 💬 **Assistant Chat Conversationnel (Façon WhatsApp)** : Posez des questions naturelles (*"Retrouve la recette de pâtes de la semaine dernière"*) et laissez l'IA vous répondre avec le lien du Reel.
+- 🔔 **Notifications Push Locales** : Notification automatique dès que l'analyse du Reel partagé est terminée.
+- 🔒 **Compte Sécurisé & Stockage 100% Local (Room DB)** : Authentification privée par Pseudo et Mot de Passe. Vos données restent sur votre smartphone.
+- 🎬 **Onboarding Carrousel Interactif** : 4 slides guidés expliquant le concept et le tutoriel de partage Instagram avec bouton pulsant d'achèvement.
+- 🎨 **Design Material You (M3)** : Thème moderne avec palette néon/violette, animations fluides et support tablette/foldable.
+- 📂 **Sauvegarde & Restauration (Export/Import JSON)** : Exportez ou restaurez votre mémoire visuelle en un clin d'œil.
 
 ---
 
 ## 🛠️ Stack Technique & Architecture
 
-- **Langage** : Kotlin 100%
-- **UI Framework** : Jetpack Compose (Material Design 3)
-- **Architecture** : MVVM (Model-View-ViewModel) + Clean Architecture
-- **Base de Données** : Room Database (SQLite avec TypeConverters & Flow reactive streams)
-- **Moteur IA** : Google Gemini API via Retrofit2 & Moshi JSON adapter
-- **Image Loading** : Coil Compose
-- **Asynchronisme** : Kotlin Coroutines & StateFlow
+```
+RemX App
+ ├── 🎨 Presentation (Jetpack Compose, Material 3, Navigation)
+ ├── 🧠 ViewModel Layer (StateFlow, Coroutines)
+ ├── 🤖 AI Service (Google Gemini API via Retrofit & Moshi)
+ ├── 💾 Local Data Layer (Room Database, SQLite, Encrypted Credentials)
+ └── 🔔 System Integration (Android Share Intent & Local Notifications)
+```
+
+| Composant | Technologie Utilisée |
+| :--- | :--- |
+| **Langage** | Kotlin 1.9+ |
+| **Interface Utilisateur** | Jetpack Compose (Material 3) |
+| **Base de Données** | Room Database (SQLite) |
+| **Intelligence Artificielle** | Google Gemini 2.0 / 1.5 Flash API |
+| **Réseau & Parsing** | Retrofit 2, OkHttp 3, Moshi JSON |
+| **Gestion des Images** | Coil Compose |
+| **Système de Build** | Gradle (Kotlin DSL `.gradle.kts`) |
 
 ---
 
-## 📱 Aperçu de l'Application
+## 📱 Onboarding & Expérience Utilisateur
 
-| Onboarding & Slides | Authentification Sécurisée | Fil d'Actualité Reels | Assistant Chat Gemini |
+| 1. Second Cerveau | 2. Partage Instagram | 3. Analyse Gemini | 4. Assistant Chat |
 | :---: | :---: | :---: | :---: |
-| 🎬 Slides interactifs avec hooks | 🔑 Inscription par Pseudo + Mot de passe | 📺 Résumés Flash et thèmes auto | 🤖 Recherche conversationnelle |
+| 🧠 Concept RemX | 📲 Menu Partage ↗ | ⚡ Résumé Automatique | 💬 Recherche Interactive |
 
 ---
 
-## 🚀 Installation & Lancement
+## 🚀 Installation & Démarrage
 
 ### Prérequis
-- Android Studio Ladybug (2024.2.1) ou plus récent
-- JDK 17+
-- Un appareil Android (API 24+ / Android 7.0+) ou un Émulateur
+- **Android Studio Ladybug** (2024.2.1+) ou version récente
+- **JDK 17**
+- Smartphone Android (Android 8.0+ / API 26+) ou Émulateur
 
 ### Étapes
-1. **Cloner le projet** :
+1. **Cloner le repository GitHub** :
    ```bash
-   git clone https://github.com/votre-username/RemX.git
+   git clone https://github.com/votre-compte/RemX.git
    cd RemX
    ```
 
-2. **Configuration de la Clé API Gemini** :
-   Créez un fichier `.env` à la racine du projet ou ajoutez dans votre environnement :
+2. **Ajouter la Clé API Gemini** :
+   Créez un fichier `.env` à la racine ou renseignez votre clé dans `BuildConfig` :
    ```env
-   GEMINI_API_KEY=votre_cle_api_gemini
+   GEMINI_API_KEY="VOTRE_CLE_API_GEMINI"
    ```
 
-3. **Compiler & Exécuter** :
-   Ouvrez le projet dans Android Studio et lancez la compilation via Gradle (`:app:assembleDebug`).
+3. **Compiler le projet** :
+   Lancez la compilation via Android Studio ou Gradle :
+   ```bash
+   ./gradlew assembleDebug
+   ```
 
 ---
 
-## 📄 Licence & Crédits
+## 👑 Crédits & Auteur
 
-- **Auteur & Développeur Principal** : **GBAGUIDI Exaucé alias Gandxo**
-- **Framework & Outils** : Android Jetpack Compose, Google Gemini AI, Room DB, Retrofit, Coil.
+- **Développeur & Créateur** : **GBAGUIDI Exaucé alias Gandxo**
+- **Contact & Portfolio** : Application conçue dans le cadre du projet RemX Studio.
 
 ---
-*Fait avec ❤️ par GBAGUIDI Exaucé (Gandxo) pour simplifier le quotidien.*
+
+<div align="center">
+  <sub>Fait avec ❤️ et passion par <strong>GBAGUIDI Exaucé (Gandxo)</strong> • RemX © 2026</sub>
+</div>

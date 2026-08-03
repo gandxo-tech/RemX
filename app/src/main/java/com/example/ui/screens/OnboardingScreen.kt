@@ -2,6 +2,7 @@ package com.example.ui.screens
 
 import android.widget.Toast
 import androidx.compose.animation.*
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -23,6 +24,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -170,6 +172,17 @@ fun OnboardingScreen(
                         }
 
                         // Bottom Controls
+                        val infiniteTransition = rememberInfiniteTransition(label = "PulseTransition")
+                        val pulseScale by infiniteTransition.animateFloat(
+                            initialValue = 1.0f,
+                            targetValue = 1.05f,
+                            animationSpec = infiniteRepeatable(
+                                animation = tween(900, easing = FastOutSlowInEasing),
+                                repeatMode = RepeatMode.Reverse
+                            ),
+                            label = "PulseScale"
+                        )
+
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -214,11 +227,12 @@ fun OnboardingScreen(
                             } else {
                                 GradientButton(
                                     onClick = { showAuthForm = true },
-                                    shape = RoundedCornerShape(14.dp)
+                                    shape = RoundedCornerShape(14.dp),
+                                    modifier = Modifier.scale(pulseScale)
                                 ) {
-                                    Text("Créer mon compte", color = Color.White, fontWeight = FontWeight.Bold)
+                                    Text("Terminer & Commencer ✨", color = Color.White, fontWeight = FontWeight.Bold)
                                     Spacer(Modifier.width(6.dp))
-                                    Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                                    Icon(Icons.Filled.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
                                 }
                             }
                         }
