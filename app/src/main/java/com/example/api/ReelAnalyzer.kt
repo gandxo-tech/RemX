@@ -145,24 +145,13 @@ object ReelAnalyzer {
         if (extracted != null) return extracted
 
         val cleanUrl = url.trim()
-        val shortcodeRegex = Regex("""instagram\.com/(?:reel|reels|p)/([A-Za-z0-9_-]+)""", RegexOption.IGNORE_CASE)
-        val userRegex = Regex("""instagram\.com/([A-Za-z0-9_.]+)/(?:reel|reels|p)/""", RegexOption.IGNORE_CASE)
+        val domain = runCatching { java.net.URL(cleanUrl).host }.getOrNull() ?: "Lien web"
+        val author = domain.removePrefix("www.")
+        val caption = cleanUrl
 
-        val shortcode = shortcodeRegex.find(cleanUrl)?.groupValues?.get(1)
-        val username = userRegex.find(cleanUrl)?.groupValues?.get(1)
-
-        val author = username ?: if (!shortcode.isNullOrBlank()) "instagram_user" else "createur_instagram"
-        val caption = if (!shortcode.isNullOrBlank()) {
-            "Reel Instagram ($shortcode)"
-        } else if (cleanUrl.contains("instagram")) {
-            "Reel sauvegardé depuis Instagram"
-        } else {
-            "Lien sauvegardé dans RemX"
-        }
-
-        val summary = "Vidéo sauvegardée depuis Instagram. Consultable et organisée dans votre mémoire RemX."
-        val themes = listOf("Instagram", "Reel", "Sauvegardé")
-        val thumbnail = "https://images.unsplash.com/photo-1611162617213-7d7a39e9b1d7?w=600&q=80"
+        val summary = "Lien partagé : $cleanUrl. Enregistré dans votre mémoire RemX."
+        val themes = listOf("Lien", "Mémoire", domain.removePrefix("www.").substringBefore("."))
+        val thumbnail = "https://images.unsplash.com/photo-1526778548025-fa2f459cd5c1?w=600&q=80"
 
         return ReelAnalysisResult(
             author = author,
@@ -191,29 +180,23 @@ object ReelAnalyzer {
                 ?: Regex("""<title>([^<]+)</title>""", RegexOption.IGNORE_CASE).find(html)
             val descMatch = Regex("""<meta\s+property="og:description"\s+content="([^"]+)"""", RegexOption.IGNORE_CASE).find(html)
             val imgMatch = Regex("""<meta\s+property="og:image"\s+content="([^"]+)"""", RegexOption.IGNORE_CASE).find(html)
-            val videoMatch = Regex("""<meta\s+property="og:video(?::secure_url)?"\s+content="([^"]+)"""", RegexOption.IGNORE_CASE).find(html)
-            val audioCaptionMatch = Regex("""(?:"caption"|"text"|"transcript"|"audio_description")\s*:\s*"([^"]+)"""", RegexOption.IGNORE_CASE).find(html)
+            val siteMatch = Regex("""<meta\s+property="og:site_name"\s+content="([^"]+)"""", RegexOption.IGNORE_CASE).find(html)
 
             val rawTitle = decodeHtmlEntities(titleMatch?.groupValues?.get(1)?.trim())
             val rawDesc = decodeHtmlEntities(descMatch?.groupValues?.get(1)?.trim())
             val rawImg = decodeHtmlEntities(imgMatch?.groupValues?.get(1)?.trim())
-            val rawAudioTranscript = decodeHtmlEntities(audioCaptionMatch?.groupValues?.get(1)?.trim())
+            val rawSite = decodeHtmlEntities(siteMatch?.groupValues?.get(1)?.trim())
 
-            var finalTitle = rawTitle
-            if (finalTitle.equals("Instagram", ignoreCase = true)) {
-                finalTitle = "Reel Instagram"
-            }
-            if (finalTitle.isNotBlank() || rawDesc.isNotBlank() || rawAudioTranscript.isNotBlank()) {
-                val fullTranscriptOrSummary = if (rawAudioTranscript.isNotBlank()) {
-                    "Transcription audio extraite : $rawAudioTranscript"
-                } else rawDesc
+            val domain = runCatching { java.net.URL(url).host }.getOrNull() ?: "Lien"
+            val author = rawSite.ifBlank { domain.removePrefix("www.") }
 
+            if (rawTitle.isNotBlank() || rawDesc.isNotBlank() || rawImg.isNotBlank()) {
                 ReelAnalysisResult(
-                    author = "instagram_creator",
-                    caption = finalTitle.take(100).ifBlank { "Reel Instagram complet" },
-                    summary = fullTranscriptOrSummary.take(300).ifBlank { "Analyse complète du contenu audio et visuel du Reel par RemX." },
-                    themes = listOf("Instagram", "Audio", "Analyse Vidéo"),
-                    thumbnailUrl = rawImg.ifBlank { "https://images.unsplash.com/photo-1611162617213-7d7a39e9b1d7?w=600&q=80" }
+                    author = author,
+                    caption = rawTitle.ifBlank { url },
+                    summary = rawDesc.ifBlank { "Contenu capturé depuis $url" },
+                    themes = listOf("Mémoire", author.substringBefore(".")),
+                    thumbnailUrl = rawImg.ifBlank { "https://images.unsplash.com/photo-1526778548025-fa2f459cd5c1?w=600&q=80" }
                 )
             } else null
         } catch (e: Exception) {

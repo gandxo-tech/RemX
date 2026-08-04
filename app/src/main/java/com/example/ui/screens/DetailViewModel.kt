@@ -61,4 +61,14 @@ class DetailViewModel(application: Application) : AndroidViewModel(application) 
             }
         }
     }
+
+    fun updateReel(updatedReel: Reel) {
+        viewModelScope.launch {
+            try {
+                repository.insert(updatedReel)
+            } catch (e: Exception) {
+                // handle error
+            }
+        }
+    }
 }

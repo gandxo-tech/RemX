@@ -17,6 +17,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.HourglassEmpty
 import androidx.compose.material.icons.filled.OpenInBrowser
@@ -49,6 +50,7 @@ fun DetailScreen(
     val state by viewModel.detailState.collectAsState()
     val context = LocalContext.current
     var showDeleteConfirm by remember { mutableStateOf(false) }
+    var showEditDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(reelId) {
         viewModel.loadReel(reelId)
@@ -71,6 +73,15 @@ fun DetailScreen(
                         }
                     },
                     actions = {
+                        if (state is DetailState.Success) {
+                            IconButton(onClick = { showEditDialog = true }) {
+                                Icon(
+                                    Icons.Filled.Edit,
+                                    contentDescription = "Éditer le souvenir",
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
                         IconButton(onClick = { showDeleteConfirm = true }) {
                             Icon(
                                 Icons.Filled.Delete,
@@ -463,5 +474,70 @@ fun DetailScreen(
                 }
             )
         }
+
+        if (showEditDialog && state is DetailState.Success) {
+            val reel = (state as DetailState.Success).reel
+            EditReelDialog(
+                reel = reel,
+                onDismiss = { showEditDialog = false },
+                onSave = { updated ->
+                    viewModel.updateReel(updated)
+                    showEditDialog = false
+                }
+            )
+        }
     }
+}
+
+@Composable
+fun EditReelDialog(reel: com.example.data.Reel, onDismiss: () -> Unit, onSave: (com.example.data.Reel) -> Unit) {
+    var caption by remember { mutableStateOf(reel.caption) }
+    var author by remember { mutableStateOf(reel.author) }
+    var summary by remember { mutableStateOf(reel.summary) }
+
+    AlertDialog(
+        shape = RoundedCornerShape(20.dp),
+        onDismissRequest = onDismiss,
+        title = { Text("Modifier le souvenir", fontWeight = FontWeight.Bold) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    value = caption,
+                    onValueChange = { caption = it },
+                    label = { Text("Titre / Légende") },
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = author,
+                    onValueChange = { author = it },
+                    label = { Text("Créateur (@)") },
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = summary,
+                    onValueChange = { summary = it },
+                    label = { Text("Résumé / Notes") },
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    onSave(reel.copy(caption = caption.trim(), author = author.trim(), summary = summary.trim()))
+                },
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Text("Enregistrer")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Annuler")
+            }
+        }
+    )
 }

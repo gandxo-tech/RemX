@@ -3,8 +3,6 @@ package com.example.ui.screens
 import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
 import androidx.compose.foundation.lazy.staggeredgrid.itemsIndexed
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
-import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridItemSpan
-import com.example.ui.components.MinimalActivityChart
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.core.tween
@@ -211,18 +209,12 @@ fun FeedScreen(
                         }
                     } else {
                         LazyVerticalStaggeredGrid(
-                            columns = StaggeredGridCells.Fixed(2),
+                            columns = StaggeredGridCells.Adaptive(minSize = 160.dp),
                             contentPadding = PaddingValues(16.dp),
                             horizontalArrangement = Arrangement.spacedBy(16.dp),
                             verticalItemSpacing = 16.dp,
                             modifier = Modifier.fillMaxSize()
                         ) {
-                            if (searchQuery.isBlank()) {
-                                item(span = StaggeredGridItemSpan.FullLine) {
-                                    val chartData = remember(state.reels) { List(7) { (3..12).random() } }
-                                    MinimalActivityChart(data = chartData, modifier = Modifier.padding(bottom = 8.dp))
-                                }
-                            }
                             itemsIndexed(state.reels, key = { _, reel -> reel.id }) { index, reel ->
                                 val visibleState = remember(reel.id) { MutableTransitionState(false) }.apply { targetState = true }
                                 val delayMs = (index * 60).coerceAtMost(300)
