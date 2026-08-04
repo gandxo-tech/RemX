@@ -24,9 +24,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     
     init {
         viewModelScope.launch {
+            val existing = userDao.getUserSync()
+            if (existing == null || !existing.isLoggedIn) {
+                userDao.insertUser(
+                    User(
+                        id = 1,
+                        name = "Sans Sécurité",
+                        passwordHash = "",
+                        isLoggedIn = true
+                    )
+                )
+            }
             userDao.getUser().collect { user ->
                 if (user == null || !user.isLoggedIn) {
-                    _appState.value = AppState.NeedsOnboarding
+                    _appState.value = AppState.Ready(User(id = 1, name = "Sans Sécurité", passwordHash = "", isLoggedIn = true))
                 } else {
                     _appState.value = AppState.Ready(user)
                 }

@@ -42,7 +42,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     
     val recentQueries = recentQueryDao.getRecentQueries()
     val highlights = highlightDao.getAllHighlights()
-    val allReelsFlow = repository.allReels
+    private val _allReels = MutableStateFlow<List<Reel>>(emptyList())
+    val allReels: StateFlow<List<Reel>> = _allReels.asStateFlow()
 
     private val _messages = MutableStateFlow<List<ChatMessage>>(emptyList())
     val messages: StateFlow<List<ChatMessage>> = _messages.asStateFlow()
@@ -63,22 +64,39 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private var messageObserveJob: Job? = null
     private var sessionObserveJob: Job? = null
 
+    private var reelsObserveJob: Job? = null
     private val apiKey = BuildConfig.GEMINI_API_KEY
     private val moshi = Moshi.Builder().add(KotlinJsonAdapterFactory()).build()
+
+    init {
+        // Reels will be loaded in loadHistoryForUser
+    }
 
     fun loadHistoryForUser(userId: String) {
         if (currentUserId == userId) return
         currentUserId = userId
+        
+        reelsObserveJob?.cancel()
+        reelsObserveJob = viewModelScope.launch {
+            repository.getReelsForUser(userId).collect {
+                _allReels.value = it
+            }
+        }
 
         // Observe all sessions for this user
         sessionObserveJob?.cancel()
         sessionObserveJob = viewModelScope.launch {
             chatMessageDao.getSessionsForUser(userId).collect { summaries ->
                 _sessions.value = summaries
-                // If current session is empty or doesn't exist in summaries, we remain on current session
                 val active = summaries.find { it.sessionId == _currentSessionId.value }
                 if (active != null) {
                     _currentSessionTitle.value = active.sessionTitle
+                } else if (summaries.isNotEmpty() && _messages.value.isEmpty()) {
+                    // Auto-select the most recent session if we are currently on an empty new session
+                    val recent = summaries.first()
+                    _currentSessionId.value = recent.sessionId
+                    _currentSessionTitle.value = recent.sessionTitle
+                    observeSessionMessages(userId, recent.sessionId)
                 }
             }
         }
@@ -91,7 +109,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         messageObserveJob?.cancel()
         messageObserveJob = viewModelScope.launch {
             chatMessageDao.getMessagesForSession(userId, sessionId).collect { entities ->
-                val reels = repository.allReels.first()
+                val reels = _allReels.value
                 val mapped = entities.map { entity ->
                     val referenced = reels.filter { entity.referencedReelIds.contains(it.id) }
                     ChatMessage(
@@ -185,7 +203,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 recentQueryDao.insertQuery(RecentQuery(query = text))
                 recentQueryDao.deleteOldQueries()
 
-                val allUserReels = repository.allReels.first()
+                val allUserReels = _allReels.value
 
                 if (apiKey.isBlank() || apiKey == "MY_GEMINI_API_KEY") {
                     val queryLower = text.lowercase()
@@ -234,144 +252,75 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     return@launch
                 }
 
-                // 1. Semantic Embedding Search
-                val relevantReels = mutableListOf<Reel>()
+
+                // Real RAG Implementation
+                val application = getApplication<Application>()
+                val relevantSegments = retrieveContextForQuery(application, text, userId, apiKey)
                 
-                try {
-                    val embedReq = EmbedContentRequest(
-                        model = "models/gemini-embedding-2-preview",
-                        content = Content(parts = listOf(Part(text = text)))
-                    )
-                    val embedRes = RetrofitClient.service.embedContent(apiKey, embedReq)
-                    val queryEmbedding = embedRes.embedding?.values ?: emptyList()
-
-                    if (queryEmbedding.isNotEmpty()) {
-                        val allWithEmbeddings = allUserReels.filter { 
-                            it.embedding.isNotEmpty()
-                        }
-
-                        val scoredReels = allWithEmbeddings.map { reel ->
-                            val score = cosineSimilarity(queryEmbedding, reel.embedding)
-                            Pair(reel, score)
-                        }
-
-                        val semanticHits = scoredReels.filter { it.second > 0.3 }
-                            .sortedByDescending { it.second }
-                            .map { it.first }
-                        
-                        relevantReels.addAll(semanticHits)
-                    }
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                }
-
-                // 2. Keyword Fallback
-                val queryLower = text.lowercase()
-                val terms = queryLower.split(" ", ",", "'", "-", "?", "!").filter { it.length > 2 }
-
-                val keywordHits = allUserReels.filter { reel ->
-                    val content = "${reel.caption} ${reel.summary} ${reel.author} ${reel.themes.joinToString(" ")} ${reel.transcript}".lowercase()
-                    terms.any { term -> content.contains(term) }
-                }
-
-                for (reel in keywordHits) {
-                    if (relevantReels.none { it.id == reel.id }) {
-                        relevantReels.add(reel)
+                // Collect relevant Reels based on segments
+                val relevantReelIds = relevantSegments.map { it.reelId }.distinct()
+                val finalReferencedReels = allUserReels.filter { relevantReelIds.contains(it.id) }
+                
+                val contextString = if (relevantSegments.isEmpty()) {
+                    "Aucun segment vidéo pertinent trouvé pour cette requête."
+                } else {
+                    relevantSegments.joinToString("\n\n") { seg ->
+                        val parentReel = finalReferencedReels.find { it.id == seg.reelId }
+                        val title = parentReel?.caption ?: "Vidéo inconnue"
+                        "--- Source: $title (${seg.startTime}s - ${seg.endTime}s) ---\n" +
+                        "Transcript: ${seg.transcript}\n" +
+                        "Visuel: ${seg.visualDescription}\n" +
+                        "Texte OCR: ${seg.ocrText}"
                     }
                 }
 
-                // If small collection (e.g. <= 10 reels), include all to give full contextual awareness
-                if (allUserReels.isNotEmpty() && relevantReels.isEmpty()) {
-                    relevantReels.addAll(allUserReels.take(5))
-                }
-
-                val topRelevant = relevantReels.take(6)
-
-                // 3. Prompt Gemini with structured output request
-                val systemInstruction = """
-                    Tu es l'assistant de mémoire visuelle IA de RemX, conçu par GBAGUIDI Exaucé (Gandxo).
-                    Ton rôle est d'aider l'utilisateur à retrouver ses souvenirs et Reels sauvegardés sur Instagram.
+                // 3. System Prompt for Gemini
+                val systemPrompt = """
+                    Tu es RemX, un assistant IA agissant comme un Second Cerveau vidéo pour l'utilisateur.
+                    Tu disposes d'extraits d'Instagram Reels sauvegardés par l'utilisateur (segments temporels, transcriptions et descriptions visuelles).
                     
-                    Tu as accès aux Reels extraits de la mémoire locale de l'utilisateur.
+                    RÈGLES IMPORTANTES :
+                    1. Réponds EXCLUSIVEMENT en te basant sur le contexte fourni. 
+                    2. Si la réponse n'est pas dans le contexte, dis clairement : "Je n'ai pas trouvé d'information à ce sujet dans tes Reels sauvegardés." N'invente jamais d'informations.
+                    3. Cite tes sources en utilisant le titre de la vidéo et les timestamps (ex: "Dans le Reel X (12s - 25s), on voit que...").
+                    4. Analyse les liens entre les vidéos si la question le demande.
+                    5. Sois concis, clair, et utilise un ton amical.
+                    6. Rédiges TOUJOURS en français.
                     
-                    Instructions :
-                    1. Réponds de façon chaleureuse, précise et structurée.
-                    2. Si des Reels correspondent, cite l'auteur et les détails pertinents (recettes, astuces, tutoriels).
-                    3. Si aucun Reel ne correspond exactement, donne des conseils utiles ou des pistes basées sur la mémoire disponible.
-                    
-                    Format JSON obligatoire :
-                    {
-                        "answer": "Texte de la réponse",
-                        "reelIds": ["id1", "id2"]
-                    }
+                    Voici les données disponibles (contexte) extraites des Reels de l'utilisateur :
+                    $contextString
                 """.trimIndent()
 
-                val contextStr = if (topRelevant.isNotEmpty()) {
-                    topRelevant.joinToString(separator = "\n\n") {
-                        "Reel ID: ${it.id}\nAuteur: ${it.author}\nCaption: ${it.caption}\nSummary: ${it.summary}\nTranscript (excerpt): ${it.transcript.take(300)}"
-                    }
-                } else {
-                    "Aucun Reel sauvegardé en mémoire pour le moment."
-                }
-
-                val prompt = "Question: $text\n\nReels disponibles:\n$contextStr"
-
-                val schema = ResponseSchema(
-                    type = "OBJECT",
-                    properties = mapOf(
-                        "answer" to ResponseSchemaProperty(type = "STRING", description = "La réponse à la question de l'utilisateur"),
-                        "reelIds" to ResponseSchemaProperty(
-                            type = "ARRAY",
-                            items = ResponseSchema(type = "STRING", description = "L'ID du reel"),
-                            description = "Les IDs des reels utilisés pour la réponse"
-                        )
-                    ),
-                    required = listOf("answer", "reelIds")
-                )
-
-                val req = GenerateContentRequest(
-                    contents = listOf(Content(parts = listOf(Part(text = prompt)))),
-                    systemInstruction = Content(parts = listOf(Part(text = systemInstruction))),
-                    generationConfig = GenerationConfig(
-                        responseMimeType = "application/json",
-                        responseSchema = schema
+                val chatContents = _messages.value.dropLast(1).map {
+                    Content(
+                        role = if (it.role == Role.USER) "user" else "model",
+                        parts = listOf(Part(text = it.text))
                     )
+                }
+
+                val aiResult = MultiAIFallbackManager.generateContentWithFallback(
+                    prompt = text,
+                    systemInstruction = systemPrompt,
+                    history = chatContents
                 )
 
-                val response = RetrofitClient.service.generateContent(apiKey, req)
-                val responseText = response.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text ?: "{}"
-                
-                // 4. Parse JSON
-                val adapter = moshi.adapter(GeminiParsedResponse::class.java)
-                val parsed = try {
-                    adapter.fromJson(responseText)
-                } catch(e: Exception) {
-                    null
-                }
-
-                val answerText = parsed?.answer ?: if (topRelevant.isNotEmpty()) {
-                    "J'ai retrouvé ces éléments dans vos Reels sauvegardés !"
-                } else {
-                    "Je n'ai pas trouvé ce souvenir exact dans votre mémoire RemX. Partagez un nouveau Reel depuis Instagram pour l'analyser !"
-                }
-                val usedReelIds = parsed?.reelIds ?: topRelevant.map { it.id }
-                val usedReels = topRelevant.filter { usedReelIds.contains(it.id) }
+                val modelResponseText = aiResult.text.ifBlank { "Je n'ai pas pu générer de réponse." }
 
                 val modelMsg = ChatMessage(
-                    text = answerText,
+                    text = modelResponseText,
                     role = Role.MODEL,
-                    referencedReels = if (usedReels.isNotEmpty()) usedReels else topRelevant.take(2)
+                    referencedReels = finalReferencedReels
                 )
+                
                 _messages.value = _messages.value + modelMsg
-
-                // Persist model message in Room DB
+                
                 chatMessageDao.insertMessage(
                     ChatMessageEntity(
                         id = modelMsg.id,
                         userId = userId,
                         sessionId = activeSessionId,
                         sessionTitle = activeTitle,
-                        text = answerText,
+                        text = modelMsg.text,
                         role = "MODEL",
                         timestamp = modelMsg.timestamp,
                         referencedReelIds = modelMsg.referencedReels.map { it.id }
@@ -380,36 +329,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
             } catch (e: Exception) {
                 e.printStackTrace()
-                val errorMsg = ChatMessage(text = "Oups, une erreur est survenue lors de la consultation de l'IA Gemini.", role = Role.MODEL)
-                _messages.value = _messages.value + errorMsg
-                
-                chatMessageDao.insertMessage(
-                    ChatMessageEntity(
-                        id = errorMsg.id,
-                        userId = userId,
-                        sessionId = activeSessionId,
-                        sessionTitle = activeTitle,
-                        text = errorMsg.text,
-                        role = "MODEL",
-                        timestamp = errorMsg.timestamp
-                    )
-                )
+                _messages.value = _messages.value + ChatMessage(text = "Erreur de connexion. Vérifiez votre réseau.", role = Role.MODEL)
             } finally {
                 _isTyping.value = false
             }
         }
-    }
-
-    private fun cosineSimilarity(v1: List<Double>, v2: List<Double>): Double {
-        if (v1.size != v2.size || v1.isEmpty()) return 0.0
-        var dotProduct = 0.0
-        var normA = 0.0
-        var normB = 0.0
-        for (i in v1.indices) {
-            dotProduct += v1[i] * v2[i]
-            normA += v1[i] * v1[i]
-            normB += v2[i] * v2[i]
-        }
-        return if (normA == 0.0 || normB == 0.0) 0.0 else dotProduct / (sqrt(normA) * sqrt(normB))
     }
 }

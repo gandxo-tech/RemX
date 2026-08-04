@@ -3,6 +3,7 @@ package com.example.data
 import kotlinx.coroutines.flow.Flow
 
 class ReelRepository(private val reelDao: ReelDao) {
+    fun getReelsForUser(userId: String): Flow<List<Reel>> = reelDao.getReelsForUser(userId)
     val allReels: Flow<List<Reel>> = reelDao.getAllReels()
 
     fun getReelById(id: String): Flow<Reel?> = reelDao.getReelById(id)

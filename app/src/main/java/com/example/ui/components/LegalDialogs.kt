@@ -174,7 +174,7 @@ private fun AProposContent() {
     LegalText("RemX transforme votre flux de Reels en une bibliothèque intelligente, consultable instantanément et toujours disponible dans votre poche.")
 
     LegalSectionHeader("Fonctionnalités Clés")
-    LegalText("✓ Partage direct depuis l'application Instagram\n✓ Analyse automatique des résumés par l'IA Gemini\n✓ Recherche textuelle et conversationnelle dans vos souvenirs\n✓ Mode hors-ligne et compte WhatsApp-style sécurisé en Room")
+    LegalText("• Partage direct depuis l'application Instagram\n• Analyse automatique des résumés par l'IA Gemini\n• Recherche textuelle et conversationnelle dans vos souvenirs\n• Mode hors-ligne et compte utilisateur sécurisé en Room")
 }
 
 @Composable

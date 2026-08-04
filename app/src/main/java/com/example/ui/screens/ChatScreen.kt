@@ -59,6 +59,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.example.data.ChatSessionSummary
 import com.example.data.Reel
+import com.example.ui.components.UnifiedReelCard
 import com.example.ui.components.RemXHeaderDivider
 import com.example.ui.theme.RemXGradientBrush
 import com.google.firebase.auth.FirebaseAuth
@@ -75,7 +76,7 @@ fun ChatScreen(viewModel: ChatViewModel = viewModel()) {
     val currentSessionTitle by viewModel.currentSessionTitle.collectAsState()
     val isTyping by viewModel.isTyping.collectAsState()
     val recentQueries by viewModel.recentQueries.collectAsState(initial = emptyList())
-    val allReels by viewModel.allReelsFlow.collectAsState(initial = emptyList())
+    val allReels by viewModel.allReels.collectAsState()
     val context = LocalContext.current
     val listState = rememberLazyListState()
     
@@ -438,30 +439,31 @@ fun ChatScreen(viewModel: ChatViewModel = viewModel()) {
                 Column(modifier = Modifier.navigationBarsPadding()) {
                     // Quick topic chips above input
                     val quickTopics = listOf(
-                        "🍳 Recettes",
-                        "✈️ Voyages",
-                        "💡 Astuces",
-                        "⚽ Sport",
-                        "🔍 Dernier Reel"
+                        Triple("Recettes", Icons.Filled.AutoAwesome, "Retrouve-moi les recettes ou plats sauvegardés dans mes Reels"),
+                        Triple("Voyages", Icons.Filled.Star, "Quels sont les conseils de voyage ou lieux enregistrés ?"),
+                        Triple("Astuces", Icons.Filled.Psychology, "Quelles sont les astuces et tutoriels importants mis de côté ?"),
+                        Triple("Sport", Icons.Filled.History, "Recherche les Reels sur le sport ou les exercices physiques"),
+                        Triple("Dernier Reel", Icons.Filled.PlayArrow, "Quel est le tout dernier Reel que j'ai enregistré ?")
                     )
 
                     LazyRow(
                         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        items(quickTopics) { topic ->
+                        items(quickTopics) { (label, icon, promptText) ->
                             SuggestionChip(
                                 onClick = {
-                                    val promptText = when(topic) {
-                                        "🍳 Recettes" -> "Retrouve-moi les recettes ou plats sauvegardés dans mes Reels"
-                                        "✈️ Voyages" -> "Quels sont les conseils de voyage ou lieux enregistrés ?"
-                                        "💡 Astuces" -> "Quelles sont les astuces et tutoriels importants mis de côté ?"
-                                        "⚽ Sport" -> "Recherche les Reels sur le sport ou les exercices physiques"
-                                        else -> "Quel est le tout dernier Reel que j'ai enregistré ?"
-                                    }
                                     viewModel.sendMessage(promptText, userId)
                                 },
-                                label = { Text(topic, fontSize = 12.sp, fontWeight = FontWeight.Medium) },
+                                icon = {
+                                    Icon(
+                                        imageVector = icon,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp),
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                },
+                                label = { Text(label, fontSize = 12.sp, fontWeight = FontWeight.Medium) },
                                 shape = RoundedCornerShape(14.dp)
                             )
                         }
@@ -770,7 +772,7 @@ fun ChatBubble(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 items(message.referencedReels) { reel ->
-                    ReelMiniCard(reel = reel, onClick = {
+                    UnifiedReelCard(reel = reel, isMini = true, onClick = {
                         val intent = Intent(Intent.ACTION_VIEW, Uri.parse(reel.url))
                         context.startActivity(intent)
                     })
@@ -780,61 +782,6 @@ fun ChatBubble(
     }
 }
 
-@Composable
-fun ReelMiniCard(reel: Reel, onClick: () -> Unit) {
-    Card(
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
-        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
-        modifier = Modifier
-            .width(140.dp)
-            .clickable(onClick = onClick)
-    ) {
-        Column {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(110.dp)
-                    .clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant),
-                contentAlignment = Alignment.Center
-            ) {
-                AsyncImage(
-                    model = reel.thumbnailUrl.ifEmpty { "https://via.placeholder.com/150" },
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize()
-                )
-
-                Surface(
-                    shape = CircleShape,
-                    color = Color.Black.copy(alpha = 0.5f),
-                    modifier = Modifier.size(32.dp)
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(Icons.Filled.PlayArrow, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
-                    }
-                }
-            }
-            Text(
-                text = if (reel.author.isNotBlank()) "@${reel.author}" else "Auteur Instagram",
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(start = 8.dp, end = 8.dp, top = 6.dp)
-            )
-            Text(
-                text = reel.caption.ifEmpty { reel.summary.ifEmpty { "Reel sauvegardé" } },
-                style = MaterialTheme.typography.bodySmall,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(start = 8.dp, end = 8.dp, bottom = 8.dp)
-            )
-        }
-    }
-}
 
 @Composable
 fun TypingIndicator() {

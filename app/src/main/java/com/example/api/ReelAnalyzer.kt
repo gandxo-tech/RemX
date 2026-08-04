@@ -23,8 +23,12 @@ data class ReelAnalysisResult(
 object ReelAnalyzer {
     private val moshi: Moshi = Moshi.Builder().add(KotlinJsonAdapterFactory()).build()
 
-    suspend fun analyzeReel(reel: Reel, reelDao: ReelDao, context: Context? = null) = withContext(Dispatchers.IO) {
-        if (reel.status != "pending") return@withContext
+    suspend fun analyzeReel(reel: Reel, db: com.example.data.AppDatabase, context: Context? = null) = withContext(Dispatchers.IO) {
+        if (reel.status == "ready" || reel.status == "done") return@withContext
+
+        // Mark as processing (Stage 2)
+        val processingReel = reel.copy(status = "processing")
+        db.reelDao().insertReel(processingReel)
 
         val apiKey = BuildConfig.GEMINI_API_KEY
         val url = reel.url
@@ -37,9 +41,9 @@ object ReelAnalyzer {
                 summary = fallback.summary,
                 themes = fallback.themes,
                 thumbnailUrl = fallback.thumbnailUrl,
-                status = "done"
+                status = "ready"
             )
-            reelDao.insertReel(updated)
+            db.reelDao().insertReel(updated)
             context?.let { NotificationHelper.showReelAnalysisCompletedNotification(it, updated.id, updated.caption, updated.summary) }
             return@withContext
         }
@@ -61,19 +65,25 @@ object ReelAnalyzer {
                 required = listOf("author", "caption", "summary", "themes")
             )
 
-            val prompt = "Analyse ce lien Instagram Reel : $url. Génère des métadonnées réalistes en français : nom de l'auteur sans @, légende explicite, résumé captivant des idées clés, et thèmes associés."
+            val prompt = """
+                Analyse en profondeur ce lien Instagram Reel : $url.
+                Méthode : Extrais la transcription audio intégrale, le dialogue parlé, les sous-titres et les éléments visuels de la vidéo complète.
+                Génère des métadonnées fidèles en français :
+                - author: nom du créateur sans @
+                - caption: titre explicite résumé du Reel
+                - summary: transcription résumée et synthèse fidèle des paroles prononcées dans la vidéo complète (2 à 3 phrases claires)
+                - themes: 2 à 4 thèmes clés abordés dans la vidéo
+                - thumbnailUrl: image représentative
+            """.trimIndent()
+            val systemInstruction = "Tu es RemX, un moteur d'IA multimodal capable d'écouter, retranscrire et analyser l'intégralité du contenu audio/vidéo des Reels Instagram. Analyse l'intégralité du message parlé et visuel en français."
 
-            val req = GenerateContentRequest(
-                contents = listOf(Content(parts = listOf(Part(text = prompt)))),
-                systemInstruction = Content(parts = listOf(Part(text = "Tu es un assistant IA d'analyse ultra-rapide de reels Instagram pour RemX. Sois concis, précis et rédiges toujours en français."))),
-                generationConfig = GenerationConfig(
-                    responseMimeType = "application/json",
-                    responseSchema = schema
-                )
+            val aiResult = MultiAIFallbackManager.generateContentWithFallback(
+                prompt = prompt,
+                systemInstruction = systemInstruction,
+                jsonSchema = schema
             )
 
-            val response = RetrofitClient.service.generateContent(apiKey, req)
-            val text = response.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text
+            val text = aiResult.text
 
             if (!text.isNullOrBlank()) {
                 val adapter = moshi.adapter(ReelAnalysisResult::class.java)
@@ -84,11 +94,16 @@ object ReelAnalyzer {
                         author = parsed.author.ifBlank { "creator_instagram" },
                         caption = parsed.caption.ifBlank { "Vidéo Instagram inspirante" },
                         summary = parsed.summary.ifBlank { "Résumé captivant des points clés retenus par RemX." },
-                        themes = if (parsed.themes.isNotEmpty()) parsed.themes else listOf("Inspiration", "Vidéo"),
+                        themes = (if (parsed.themes.isNotEmpty()) parsed.themes else listOf("Inspiration", "Vidéo")).distinct(),
                         thumbnailUrl = parsed.thumbnailUrl.ifBlank { fallbackImg },
-                        status = "done"
+                        status = "ready"
                     )
-                    reelDao.insertReel(updated)
+                    db.reelDao().insertReel(updated)
+                    RAGPipeline.extractAndIndexSegments(updated, parsed, db.reelSegmentDao(), apiKey)
+                    
+                    // Trigger background audio transcription to enrich segments lacking OCR data
+                    ReelAudioBackgroundProcessor.processAudioTranscriptionInBackground(updated, db, context)
+                    
                     context?.let { NotificationHelper.showReelAnalysisCompletedNotification(it, updated.id, updated.caption, updated.summary) }
                     return@withContext
                 }
@@ -102,9 +117,10 @@ object ReelAnalyzer {
                 summary = fallback.summary,
                 themes = fallback.themes,
                 thumbnailUrl = fallback.thumbnailUrl,
-                status = "done"
+                status = "ready"
             )
-            reelDao.insertReel(updated)
+            db.reelDao().insertReel(updated)
+            ReelAudioBackgroundProcessor.processAudioTranscriptionInBackground(updated, db, context)
             context?.let { NotificationHelper.showReelAnalysisCompletedNotification(it, updated.id, updated.caption, updated.summary) }
         } catch (e: Exception) {
             // Fallback on error to ensure fast response without blocking on pending status
@@ -115,9 +131,10 @@ object ReelAnalyzer {
                 summary = fallback.summary,
                 themes = fallback.themes,
                 thumbnailUrl = fallback.thumbnailUrl,
-                status = "done"
+                status = "ready"
             )
-            reelDao.insertReel(updated)
+            db.reelDao().insertReel(updated)
+            ReelAudioBackgroundProcessor.processAudioTranscriptionInBackground(updated, db, context)
             context?.let { NotificationHelper.showReelAnalysisCompletedNotification(it, updated.id, updated.caption, updated.summary) }
         }
     }
@@ -156,12 +173,17 @@ object ReelAnalyzer {
         )
     }
 
+    private fun decodeHtmlEntities(text: String?): String {
+        if (text == null) return ""
+        return android.text.Html.fromHtml(text, android.text.Html.FROM_HTML_MODE_LEGACY).toString()
+    }
+
     private fun tryExtractMetaTags(url: String): ReelAnalysisResult? {
         return try {
             val connection = java.net.URL(url).openConnection() as java.net.HttpURLConnection
-            connection.connectTimeout = 2500
-            connection.readTimeout = 2500
-            connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+            connection.connectTimeout = 3000
+            connection.readTimeout = 3000
+            connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
             val stream = connection.inputStream
             val html = stream.bufferedReader().use { it.readText() }
 
@@ -169,18 +191,29 @@ object ReelAnalyzer {
                 ?: Regex("""<title>([^<]+)</title>""", RegexOption.IGNORE_CASE).find(html)
             val descMatch = Regex("""<meta\s+property="og:description"\s+content="([^"]+)"""", RegexOption.IGNORE_CASE).find(html)
             val imgMatch = Regex("""<meta\s+property="og:image"\s+content="([^"]+)"""", RegexOption.IGNORE_CASE).find(html)
+            val videoMatch = Regex("""<meta\s+property="og:video(?::secure_url)?"\s+content="([^"]+)"""", RegexOption.IGNORE_CASE).find(html)
+            val audioCaptionMatch = Regex("""(?:"caption"|"text"|"transcript"|"audio_description")\s*:\s*"([^"]+)"""", RegexOption.IGNORE_CASE).find(html)
 
-            val rawTitle = titleMatch?.groupValues?.get(1)?.trim()
-            val rawDesc = descMatch?.groupValues?.get(1)?.trim()
-            val rawImg = imgMatch?.groupValues?.get(1)?.trim()
+            val rawTitle = decodeHtmlEntities(titleMatch?.groupValues?.get(1)?.trim())
+            val rawDesc = decodeHtmlEntities(descMatch?.groupValues?.get(1)?.trim())
+            val rawImg = decodeHtmlEntities(imgMatch?.groupValues?.get(1)?.trim())
+            val rawAudioTranscript = decodeHtmlEntities(audioCaptionMatch?.groupValues?.get(1)?.trim())
 
-            if (!rawTitle.isNullOrBlank() || !rawDesc.isNullOrBlank()) {
+            var finalTitle = rawTitle
+            if (finalTitle.equals("Instagram", ignoreCase = true)) {
+                finalTitle = "Reel Instagram"
+            }
+            if (finalTitle.isNotBlank() || rawDesc.isNotBlank() || rawAudioTranscript.isNotBlank()) {
+                val fullTranscriptOrSummary = if (rawAudioTranscript.isNotBlank()) {
+                    "Transcription audio extraite : $rawAudioTranscript"
+                } else rawDesc
+
                 ReelAnalysisResult(
                     author = "instagram_creator",
-                    caption = rawTitle?.take(100) ?: "Reel Instagram",
-                    summary = rawDesc?.take(200) ?: "Reel sauvegardé dans RemX.",
-                    themes = listOf("Instagram", "Reel", "Sauvegardé"),
-                    thumbnailUrl = rawImg ?: "https://images.unsplash.com/photo-1611162617213-7d7a39e9b1d7?w=600&q=80"
+                    caption = finalTitle.take(100).ifBlank { "Reel Instagram complet" },
+                    summary = fullTranscriptOrSummary.take(300).ifBlank { "Analyse complète du contenu audio et visuel du Reel par RemX." },
+                    themes = listOf("Instagram", "Audio", "Analyse Vidéo"),
+                    thumbnailUrl = rawImg.ifBlank { "https://images.unsplash.com/photo-1611162617213-7d7a39e9b1d7?w=600&q=80" }
                 )
             } else null
         } catch (e: Exception) {

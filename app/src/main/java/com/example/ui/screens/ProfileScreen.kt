@@ -1,9 +1,13 @@
 package com.example.ui.screens
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -16,18 +20,23 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.MainViewModel
+import com.example.R
 import com.example.data.UserPreferences
 import com.example.ui.components.GradientButton
 import com.example.ui.components.LegalInfoModal
 import com.example.ui.components.LegalModalType
 import com.example.ui.components.RemXHeaderDivider
+import com.example.util.NotificationHelper
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -38,6 +47,32 @@ fun ProfileScreen(
     val context = LocalContext.current
     val userPreferences = remember { UserPreferences.getInstance(context) }
     val currentThemeMode by userPreferences.themeMode.collectAsState()
+    val notifEnabled by userPreferences.notificationsEnabled.collectAsState()
+    val notifReels by userPreferences.notifReels.collectAsState()
+    val notifReminders by userPreferences.notifReminders.collectAsState()
+    val notifSuggestions by userPreferences.notifSuggestions.collectAsState()
+
+    var hasNotifPermission by remember {
+        mutableStateOf(
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+            } else {
+                true
+            }
+        )
+    }
+
+    val notifPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        hasNotifPermission = isGranted
+        if (isGranted) {
+            userPreferences.setNotificationsEnabled(true)
+            Toast.makeText(context, "Notifications autorisées !", Toast.LENGTH_SHORT).show()
+        } else {
+            Toast.makeText(context, "Permission de notification non accordée", Toast.LENGTH_SHORT).show()
+        }
+    }
 
     val user by viewModel.user.collectAsState(initial = null)
     val username = user?.name ?: "Utilisateur RemX"
@@ -72,11 +107,21 @@ fun ProfileScreen(
             Column {
                 TopAppBar(
                     title = {
-                        Text(
-                            text = "RemX • Espace Profil & Sécurité",
-                            fontWeight = FontWeight.Bold,
-                            style = MaterialTheme.typography.titleLarge
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Image(
+                                painter = painterResource(id = R.drawable.ic_launcher_background),
+                                contentDescription = "Logo RemX",
+                                modifier = Modifier
+                                    .size(32.dp)
+                                    .clip(CircleShape)
+                            )
+                            Spacer(Modifier.width(10.dp))
+                            Text(
+                                text = "RemX • Espace Profil & Sécurité",
+                                fontWeight = FontWeight.Bold,
+                                style = MaterialTheme.typography.titleLarge
+                            )
+                        }
                     }
                 )
                 RemXHeaderDivider()
@@ -91,7 +136,7 @@ fun ProfileScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
-            // User Header Card (WhatsApp Style)
+            // User Header Card
             Card(
                 shape = RoundedCornerShape(20.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)),
@@ -130,7 +175,7 @@ fun ProfileScreen(
                             Icon(
                                 Icons.Filled.Lock,
                                 contentDescription = null,
-                                tint = Color(0xFF25D366),
+                                tint = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.size(14.dp)
                             )
                             Spacer(modifier = Modifier.width(4.dp))
@@ -215,6 +260,180 @@ fun ProfileScreen(
                                 label = { Text("Clair") },
                                 shape = RoundedCornerShape(12.dp)
                             )
+                        }
+                    }
+                }
+            }
+
+            // Notifications Push Card
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    text = "Notifications & Alertes",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
+
+                Card(
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(14.dp)
+                    ) {
+                        // Master Switch
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.NotificationsActive,
+                                    contentDescription = "Notifications",
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                                Column {
+                                    Text(
+                                        text = "Activer les notifications RemX",
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Text(
+                                        text = if (notifEnabled && hasNotifPermission) "Gestion active des alertes de l'application" else "Notifications désactivées ou non autorisées",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+
+                            Switch(
+                                checked = notifEnabled && hasNotifPermission,
+                                onCheckedChange = { isChecked ->
+                                    if (isChecked) {
+                                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !hasNotifPermission) {
+                                            notifPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                                        } else {
+                                            userPreferences.setNotificationsEnabled(true)
+                                        }
+                                    } else {
+                                        userPreferences.setNotificationsEnabled(false)
+                                    }
+                                }
+                            )
+                        }
+
+                        if (notifEnabled && hasNotifPermission) {
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+
+                            // Sub-category 1: Reel Analysis
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "🎬 Analyses de Reels terminées",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                    Text(
+                                        text = "Notification immédiate lorsque le résumé Gemini d'un Reel est prêt",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                Switch(
+                                    checked = notifReels,
+                                    onCheckedChange = { userPreferences.setNotifReelsEnabled(it) }
+                                )
+                            }
+
+                            // Sub-category 2: Reminders & Memorization
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "🧠 Rappels de mémorisation",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                    Text(
+                                        text = "Rappels pour ré-explorer vos recettes, astuces et souvenirs sauvegardés",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                Switch(
+                                    checked = notifReminders,
+                                    onCheckedChange = { userPreferences.setNotifRemindersEnabled(it) }
+                                )
+                            }
+
+                            // Sub-category 3: AI Suggestions
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "💡 Conseils & Suggestions IA",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                    Text(
+                                        text = "Recommandations d'organisation personnalisées de l'assistant RemX",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                Switch(
+                                    checked = notifSuggestions,
+                                    onCheckedChange = { userPreferences.setNotifSuggestionsEnabled(it) }
+                                )
+                            }
+
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+
+                            // Test Notification Button
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "Envoyer une notification de test",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Medium
+                                )
+
+                                OutlinedButton(
+                                    onClick = {
+                                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !hasNotifPermission) {
+                                            notifPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                                        } else {
+                                            NotificationHelper.showTestNotification(context)
+                                            Toast.makeText(context, "Notification de test envoyée !", Toast.LENGTH_SHORT).show()
+                                        }
+                                    },
+                                    shape = RoundedCornerShape(12.dp)
+                                ) {
+                                    Icon(Icons.Filled.Send, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(Modifier.width(6.dp))
+                                    Text("Tester", fontSize = 13.sp)
+                                }
+                            }
                         }
                     }
                 }
@@ -308,7 +527,7 @@ fun ProfileScreen(
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = "Application développée avec passion par GBAGUIDI Exaucé alias Gandxo ✨",
+                    text = "Application développée avec passion par GBAGUIDI Exaucé alias Gandxo",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.outline,
                     fontWeight = FontWeight.Medium

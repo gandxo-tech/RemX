@@ -2,6 +2,13 @@ package com.example.ui.screens
 
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -29,6 +36,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.example.ui.components.GradientButton
+import com.example.ui.components.ReelAnalysisProgressIndicator
 import com.example.ui.components.RemXHeaderDivider
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -81,22 +89,34 @@ fun DetailScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
-            when (val currentState = state) {
-                is DetailState.Loading -> {
-                    CircularProgressIndicator(
-                        modifier = Modifier.align(Alignment.Center),
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                }
-                is DetailState.Error -> {
-                    Text(
-                        text = currentState.message,
-                        color = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.align(Alignment.Center)
-                    )
-                }
-                is DetailState.Success -> {
-                    val reel = currentState.reel
+            AnimatedContent(
+                targetState = state,
+                transitionSpec = {
+                    fadeIn(animationSpec = tween(350)) + slideInVertically(
+                        initialOffsetY = { it / 6 },
+                        animationSpec = tween(350, easing = FastOutSlowInEasing)
+                    ) togetherWith fadeOut(animationSpec = tween(200))
+                },
+                label = "DetailStateAnimation"
+            ) { currentState ->
+                when (currentState) {
+                    is DetailState.Loading -> {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator(
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+                    is DetailState.Error -> {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Text(
+                                text = currentState.message,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        }
+                    }
+                    is DetailState.Success -> {
+                        val reel = currentState.reel
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
@@ -119,11 +139,25 @@ fun DetailScreen(
                                 contentAlignment = Alignment.Center
                             ) {
                                 if (reel.thumbnailUrl.isNotEmpty()) {
-                                    AsyncImage(
+                                    coil.compose.SubcomposeAsyncImage(
                                         model = reel.thumbnailUrl,
                                         contentDescription = "Miniature vidéo",
                                         contentScale = ContentScale.Crop,
-                                        modifier = Modifier.fillMaxSize()
+                                        modifier = Modifier.fillMaxSize(),
+                                        loading = {
+                                            CircularProgressIndicator(
+                                                modifier = Modifier.align(Alignment.Center).size(24.dp),
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        },
+                                        error = {
+                                            Icon(
+                                                imageVector = Icons.Filled.Error,
+                                                contentDescription = "Erreur de chargement",
+                                                tint = MaterialTheme.colorScheme.error,
+                                                modifier = Modifier.size(64.dp)
+                                            )
+                                        }
                                     )
                                 } else {
                                     Icon(
@@ -204,6 +238,12 @@ fun DetailScreen(
                             }
                         }
 
+                        // Progress Indicator Card
+                        ReelAnalysisProgressIndicator(
+                            status = reel.status,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
                         // Analyse & Contenu gardé en mémoire
                         Card(
                             shape = RoundedCornerShape(16.dp),
@@ -222,7 +262,7 @@ fun DetailScreen(
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
                                 
-                                if (reel.status == "pending") {
+                                if (reel.status == "pending" || reel.status == "uploaded" || reel.status == "processing") {
                                     Surface(
                                         color = MaterialTheme.colorScheme.secondaryContainer,
                                         shape = RoundedCornerShape(12.dp),
@@ -235,7 +275,7 @@ fun DetailScreen(
                                         ) {
                                             CircularProgressIndicator(modifier = Modifier.size(24.dp))
                                             Text(
-                                                text = "Je suis en train d'analyser cette vidéo... Reviens dans un instant pour lire les détails !",
+                                                text = "RemX analyse cette vidéo (étape 2/3 : extraction des segments et de la transcription)...",
                                                 style = MaterialTheme.typography.bodyMedium,
                                                 color = MaterialTheme.colorScheme.onSecondaryContainer
                                             )
@@ -264,7 +304,7 @@ fun DetailScreen(
                                         }
                                     }
                                     
-                                    if (reel.summary.isNotEmpty()) {
+                                    if (reel.summary.isNotEmpty() && reel.summary != reel.caption) {
                                         Text(
                                             text = reel.summary,
                                             style = MaterialTheme.typography.bodyLarge,
@@ -274,11 +314,128 @@ fun DetailScreen(
                                 }
                             }
                         }
+
+                        // Segments & Transcription Audio (Arrière-Plan)
+                        if (currentState.segments.isNotEmpty()) {
+                            Card(
+                                shape = RoundedCornerShape(16.dp),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(16.dp),
+                                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Filled.HourglassEmpty,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.primary
+                                        )
+                                        Text(
+                                            text = "Transcription Audio & Contextes (Arrière-Plan)",
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                    Text(
+                                        text = "Processus d'arrière-plan actif : extraction des paroles pour les segments sans texte OCR suffisant.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                                    )
+
+                                    currentState.segments.forEachIndexed { index, seg ->
+                                        Surface(
+                                            shape = RoundedCornerShape(12.dp),
+                                            color = MaterialTheme.colorScheme.surface,
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) {
+                                            Column(
+                                                modifier = Modifier.padding(12.dp),
+                                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                                            ) {
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Text(
+                                                        text = "Segment ${index + 1} (${seg.startTime.toInt()}s - ${seg.endTime.toInt()}s)",
+                                                        style = MaterialTheme.typography.labelLarge,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = MaterialTheme.colorScheme.primary
+                                                    )
+                                                    if (seg.ocrText.contains("Audio", ignoreCase = true) || seg.transcript.isNotBlank()) {
+                                                        SuggestionChip(
+                                                            onClick = {},
+                                                            label = { Text("Audio transcrit", style = MaterialTheme.typography.labelSmall) },
+                                                            shape = RoundedCornerShape(8.dp)
+                                                        )
+                                                    }
+                                                }
+                                                if (seg.transcript.isNotBlank()) {
+                                                    Text(
+                                                        text = "Paroles : ${seg.transcript}",
+                                                        style = MaterialTheme.typography.bodyMedium,
+                                                        fontWeight = FontWeight.Medium
+                                                    )
+                                                }
+                                                if (seg.summary.isNotBlank()) {
+                                                    Text(
+                                                        text = "Contexte : ${seg.summary}",
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Métadonnées
+                        Card(
+                            shape = RoundedCornerShape(16.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(16.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Text(
+                                    text = "Métadonnées",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Text(
+                                    text = "Plateforme : Instagram • Reel",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                if (reel.author.isNotEmpty()) {
+                                    Text(
+                                        text = "Créateur : @${reel.author}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }
         }
-        
+        }
+
         if (showDeleteConfirm) {
             AlertDialog(
                 shape = RoundedCornerShape(20.dp),

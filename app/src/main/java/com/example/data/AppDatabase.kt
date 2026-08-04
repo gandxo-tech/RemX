@@ -6,10 +6,12 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 
-@Database(entities = [Reel::class, User::class, RecentQuery::class, Highlight::class, ChatMessageEntity::class], version = 7, exportSchema = false)
+@Database(entities = [Reel::class, ReelSegment::class, ReelMetadata::class, User::class, RecentQuery::class, Highlight::class, ChatMessageEntity::class], version = 9, exportSchema = false)
 @TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun reelDao(): ReelDao
+    abstract fun reelSegmentDao(): ReelSegmentDao
+    abstract fun reelMetadataDao(): ReelMetadataDao
     abstract fun userDao(): UserDao
     abstract fun recentQueryDao(): RecentQueryDao
     abstract fun highlightDao(): HighlightDao

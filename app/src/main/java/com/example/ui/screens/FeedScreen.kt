@@ -1,16 +1,20 @@
 package com.example.ui.screens
 
 import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
-import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
 import androidx.compose.foundation.lazy.staggeredgrid.itemsIndexed
+import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
+import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridItemSpan
+import com.example.ui.components.MinimalActivityChart
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.slideInVertically
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -26,6 +30,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.res.painterResource
+import com.example.R
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
@@ -36,6 +42,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.example.data.Reel
+import com.example.ui.components.UnifiedReelCard
 import com.example.ui.components.GradientButton
 import com.example.ui.theme.RemXGradientBrush
 import com.example.ui.components.RemXHeaderDivider
@@ -59,11 +66,21 @@ fun FeedScreen(
             Column {
                 TopAppBar(
                     title = {
-                        Text(
-                            text = "RemX • Mes Souvenirs",
-                            fontWeight = FontWeight.Bold,
-                            style = MaterialTheme.typography.titleLarge
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Image(
+                                painter = painterResource(id = R.drawable.ic_launcher_background),
+                                contentDescription = "Logo RemX",
+                                modifier = Modifier
+                                    .size(32.dp)
+                                    .clip(CircleShape)
+                            )
+                            Spacer(Modifier.width(10.dp))
+                            Text(
+                                text = "RemX • Mes Souvenirs",
+                                fontWeight = FontWeight.Bold,
+                                style = MaterialTheme.typography.titleLarge
+                            )
+                        }
                     }
                 )
                 OutlinedTextField(
@@ -126,7 +143,7 @@ fun FeedScreen(
             when (val state = feedState) {
                 is FeedState.Loading -> {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                        com.example.ui.components.LottieLoadingAnimation(size = 80.dp)
                     }
                 }
                 is FeedState.Error -> {
@@ -200,6 +217,12 @@ fun FeedScreen(
                             verticalItemSpacing = 16.dp,
                             modifier = Modifier.fillMaxSize()
                         ) {
+                            if (searchQuery.isBlank()) {
+                                item(span = StaggeredGridItemSpan.FullLine) {
+                                    val chartData = remember(state.reels) { List(7) { (3..12).random() } }
+                                    MinimalActivityChart(data = chartData, modifier = Modifier.padding(bottom = 8.dp))
+                                }
+                            }
                             itemsIndexed(state.reels, key = { _, reel -> reel.id }) { index, reel ->
                                 val visibleState = remember(reel.id) { MutableTransitionState(false) }.apply { targetState = true }
                                 val delayMs = (index * 60).coerceAtMost(300)
@@ -249,7 +272,7 @@ fun FeedScreen(
                                         },
                                         enableDismissFromStartToEnd = false
                                     ) {
-                                        ReelItem(reel = reel, onClick = { onNavigateToDetail(reel.id) })
+                                        UnifiedReelCard(reel = reel, onClick = { onNavigateToDetail(reel.id) })
                                     }
                                 }
                             }
@@ -271,108 +294,6 @@ fun FeedScreen(
     }
 }
 
-@Composable
-fun ReelItem(reel: Reel, onClick: () -> Unit) {
-    Card(
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-    ) {
-        Column(
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            // Thumbnail format dynamic pour le staggered grid
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .aspectRatio(0.75f) // Ratio vertical style image
-                    .background(MaterialTheme.colorScheme.surface),
-                contentAlignment = Alignment.Center
-            ) {
-                if (reel.thumbnailUrl.isNotEmpty()) {
-                    AsyncImage(
-                        model = reel.thumbnailUrl,
-                        contentDescription = "Miniature vidéo",
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize()
-                    )
-                } else {
-                    Icon(
-                        imageVector = if (reel.status == "error") Icons.Filled.Error else Icons.Filled.HourglassEmpty,
-                        contentDescription = "En attente",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-            
-            // Context & Details
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(12.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                if (reel.author.isNotEmpty()) {
-                    Text(
-                        text = "@${reel.author}",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-                
-                if (reel.status == "pending") {
-                    Text(
-                        text = "Analyse en cours...",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSecondaryContainer,
-                        modifier = Modifier
-                            .background(MaterialTheme.colorScheme.secondaryContainer, RoundedCornerShape(4.dp))
-                            .padding(horizontal = 4.dp, vertical = 2.dp)
-                    )
-                } else if (reel.status == "error") {
-                    Text(
-                        text = "Erreur",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.error
-                    )
-                }
-                
-                Text(
-                    text = reel.caption.takeIf { it.isNotEmpty() } ?: if (reel.status == "pending") "En cours..." else "Sans description",
-                    style = MaterialTheme.typography.bodySmall,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                
-                if (reel.themes.isNotEmpty()) {
-                    @OptIn(ExperimentalLayoutApi::class)
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp),
-                        modifier = Modifier.padding(top = 4.dp)
-                    ) {
-                        reel.themes.take(2).forEach { theme ->
-                            SuggestionChip(
-                                onClick = { },
-                                label = { Text(theme, style = MaterialTheme.typography.labelSmall, fontSize = 10.sp) },
-                                modifier = Modifier.height(24.dp),
-                                shape = RoundedCornerShape(8.dp)
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
 
 @Composable
 fun AddReelDialog(onDismiss: () -> Unit, onAdd: (String) -> Unit) {

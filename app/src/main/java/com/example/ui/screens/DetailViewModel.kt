@@ -6,6 +6,8 @@ import androidx.lifecycle.viewModelScope
 import com.example.data.AppDatabase
 import com.example.data.Reel
 import com.example.data.ReelRepository
+import com.example.data.ReelSegment
+import com.example.data.ReelSegmentDao
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -14,12 +16,13 @@ import kotlinx.coroutines.launch
 
 sealed class DetailState {
     object Loading : DetailState()
-    data class Success(val reel: Reel) : DetailState()
+    data class Success(val reel: Reel, val segments: List<ReelSegment> = emptyList()) : DetailState()
     data class Error(val message: String) : DetailState()
 }
 
 class DetailViewModel(application: Application) : AndroidViewModel(application) {
     private val repository: ReelRepository
+    private val segmentDao: ReelSegmentDao
     
     private val _detailState = MutableStateFlow<DetailState>(DetailState.Loading)
     val detailState: StateFlow<DetailState> = _detailState.asStateFlow()
@@ -27,6 +30,7 @@ class DetailViewModel(application: Application) : AndroidViewModel(application) 
     init {
         val database = AppDatabase.getDatabase(application)
         repository = ReelRepository(database.reelDao())
+        segmentDao = database.reelSegmentDao()
     }
 
     fun loadReel(reelId: String) {
@@ -35,7 +39,11 @@ class DetailViewModel(application: Application) : AndroidViewModel(application) 
                 .catch { e -> _detailState.value = DetailState.Error(e.message ?: "Erreur") }
                 .collect { reel ->
                     if (reel != null) {
-                        _detailState.value = DetailState.Success(reel)
+                        viewModelScope.launch {
+                            segmentDao.getSegmentsForReel(reelId).collect { segments ->
+                                _detailState.value = DetailState.Success(reel, segments)
+                            }
+                        }
                     } else {
                         _detailState.value = DetailState.Error("Reel introuvable")
                     }

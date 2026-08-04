@@ -11,6 +11,7 @@ import com.example.data.ReelRepository
 import kotlinx.coroutines.launch
 
 import com.example.api.ReelAnalyzer
+import com.google.firebase.auth.FirebaseAuth
 
 class ShareActivity : ComponentActivity() {
     private lateinit var repository: ReelRepository
@@ -50,8 +51,9 @@ class ShareActivity : ComponentActivity() {
     }
 
     private fun saveReelToLocal(url: String) {
+        val userId = try { FirebaseAuth.getInstance().currentUser?.uid ?: "local_user" } catch (e: Exception) { "local_user" }
         val newReel = Reel(
-            userId = "local_user",
+            userId = userId,
             url = url,
             status = "pending"
         )
@@ -60,8 +62,8 @@ class ShareActivity : ComponentActivity() {
             try {
                 repository.insert(newReel)
                 val database = AppDatabase.getDatabase(this@ShareActivity)
-                ReelAnalyzer.analyzeReel(newReel, database.reelDao())
-                Toast.makeText(this@ShareActivity, "Reel enregistré et en cours d'analyse ✓", Toast.LENGTH_SHORT).show()
+                ReelAnalyzer.analyzeReel(newReel, database)
+                Toast.makeText(this@ShareActivity, "Reel enregistré et en cours d'analyse", Toast.LENGTH_SHORT).show()
             } catch (e: Exception) {
                 Toast.makeText(this@ShareActivity, "Erreur lors de l'enregistrement", Toast.LENGTH_SHORT).show()
             } finally {

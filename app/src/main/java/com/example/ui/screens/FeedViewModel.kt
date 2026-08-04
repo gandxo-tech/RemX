@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 import com.example.api.ReelAnalyzer
+import com.google.firebase.auth.FirebaseAuth
 
 sealed class FeedState {
     object Loading : FeedState()
@@ -59,9 +60,10 @@ class FeedViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun fetchReels() {
+        val userId = try { FirebaseAuth.getInstance().currentUser?.uid ?: "local_user" } catch (e: Exception) { "local_user" }
         viewModelScope.launch {
             _isLoading.value = true
-            repository.allReels
+            repository.getReelsForUser(userId)
                 .catch { e ->
                     _error.value = e.message ?: "Erreur de chargement"
                     _isLoading.value = false
@@ -70,12 +72,12 @@ class FeedViewModel(application: Application) : AndroidViewModel(application) {
                     _rawReels.value = reels
                     _isLoading.value = false
 
-                    // Auto-analyze any pending reels
-                    reels.filter { it.status == "pending" }.forEach { pendingReel ->
+                    // Auto-analyze any pending/uploaded reels
+                    reels.filter { it.status == "pending" || it.status == "uploaded" }.forEach { pendingReel ->
                         viewModelScope.launch {
                             val context = getApplication<Application>().applicationContext
-                            val dao = AppDatabase.getDatabase(getApplication()).reelDao()
-                            ReelAnalyzer.analyzeReel(pendingReel, dao, context)
+                            val db = AppDatabase.getDatabase(getApplication())
+                            ReelAnalyzer.analyzeReel(pendingReel, db, context)
                         }
                     }
                 }
@@ -87,16 +89,17 @@ class FeedViewModel(application: Application) : AndroidViewModel(application) {
     }
     
     fun addReel(url: String) {
+        val userId = try { FirebaseAuth.getInstance().currentUser?.uid ?: "local_user" } catch (e: Exception) { "local_user" }
         viewModelScope.launch {
             val newReel = Reel(
-                userId = "local_user",
+                userId = userId,
                 url = url,
-                status = "pending"
+                status = "uploaded"
             )
             val context = getApplication<Application>().applicationContext
-            val dao = AppDatabase.getDatabase(getApplication()).reelDao()
+            val db = AppDatabase.getDatabase(getApplication())
             repository.insert(newReel)
-            ReelAnalyzer.analyzeReel(newReel, dao, context)
+            ReelAnalyzer.analyzeReel(newReel, db, context)
         }
     }
 

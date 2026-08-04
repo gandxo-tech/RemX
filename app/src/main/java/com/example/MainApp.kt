@@ -1,5 +1,13 @@
 package com.example
 
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Chat
@@ -100,8 +108,38 @@ fun MainAppContent() {
             }
         }
     ) { innerPadding ->
-        NavHost(navController, startDestination = Screen.Feed.route, Modifier.padding(innerPadding)) {
-            composable(Screen.Feed.route) { 
+        NavHost(
+            navController = navController,
+            startDestination = Screen.Feed.route,
+            modifier = Modifier.padding(innerPadding),
+            enterTransition = {
+                fadeIn(animationSpec = tween(300))
+            },
+            exitTransition = {
+                fadeOut(animationSpec = tween(250))
+            },
+            popEnterTransition = {
+                fadeIn(animationSpec = tween(300))
+            },
+            popExitTransition = {
+                fadeOut(animationSpec = tween(250))
+            }
+        ) {
+            composable(
+                route = Screen.Feed.route,
+                exitTransition = {
+                    slideOutHorizontally(
+                        targetOffsetX = { fullWidth -> -fullWidth / 4 },
+                        animationSpec = tween(350, easing = FastOutSlowInEasing)
+                    ) + fadeOut(animationSpec = tween(250))
+                },
+                popEnterTransition = {
+                    slideInHorizontally(
+                        initialOffsetX = { fullWidth -> -fullWidth / 4 },
+                        animationSpec = tween(350, easing = FastOutSlowInEasing)
+                    ) + fadeIn(animationSpec = tween(300))
+                }
+            ) { 
                 FeedScreen(onNavigateToDetail = { reelId -> 
                     navController.navigate("detail/$reelId")
                 }) 
@@ -109,8 +147,38 @@ fun MainAppContent() {
             composable(Screen.Chat.route) { ChatScreen() }
             composable(Screen.Profile.route) { ProfileScreen() }
             composable(
-                "detail/{reelId}",
-                arguments = listOf(navArgument("reelId") { type = NavType.StringType })
+                route = "detail/{reelId}",
+                arguments = listOf(navArgument("reelId") { type = NavType.StringType }),
+                enterTransition = {
+                    slideInHorizontally(
+                        initialOffsetX = { fullWidth -> fullWidth },
+                        animationSpec = tween(380, easing = FastOutSlowInEasing)
+                    ) + fadeIn(animationSpec = tween(300)) + scaleIn(
+                        initialScale = 0.94f,
+                        animationSpec = tween(380, easing = FastOutSlowInEasing)
+                    )
+                },
+                exitTransition = {
+                    slideOutHorizontally(
+                        targetOffsetX = { fullWidth -> -fullWidth / 4 },
+                        animationSpec = tween(320, easing = FastOutSlowInEasing)
+                    ) + fadeOut(animationSpec = tween(250))
+                },
+                popEnterTransition = {
+                    slideInHorizontally(
+                        initialOffsetX = { fullWidth -> -fullWidth / 4 },
+                        animationSpec = tween(320, easing = FastOutSlowInEasing)
+                    ) + fadeIn(animationSpec = tween(300))
+                },
+                popExitTransition = {
+                    slideOutHorizontally(
+                        targetOffsetX = { fullWidth -> fullWidth },
+                        animationSpec = tween(380, easing = FastOutSlowInEasing)
+                    ) + fadeOut(animationSpec = tween(300)) + scaleOut(
+                        targetScale = 0.94f,
+                        animationSpec = tween(380, easing = FastOutSlowInEasing)
+                    )
+                }
             ) { backStackEntry ->
                 val reelId = backStackEntry.arguments?.getString("reelId") ?: ""
                 DetailScreen(reelId = reelId, onNavigateBack = { navController.popBackStack() })

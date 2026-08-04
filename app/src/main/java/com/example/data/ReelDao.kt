@@ -8,6 +8,9 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface ReelDao {
+    @Query("SELECT * FROM reels WHERE userId = :userId ORDER BY createdAt DESC")
+    fun getReelsForUser(userId: String): Flow<List<Reel>>
+    
     @Query("SELECT * FROM reels ORDER BY createdAt DESC")
     fun getAllReels(): Flow<List<Reel>>
 
